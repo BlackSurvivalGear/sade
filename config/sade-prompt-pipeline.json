@@ -1,0 +1,15 @@
+{
+  "name": "SADE Engineering Pipeline",
+  "version": "1.0.0",
+  "constitution": "docs/SADE-SOFTWARE-ENGINEERING-CONSTITUTION.md",
+  "stages": [
+    {"id":"intake","name":"Intake","role":"Orchestrator","prompt":"Translate the user's request into a precise engineering objective, constraints and acceptance criteria."},
+    {"id":"recon","name":"Reconnaissance","role":"Recon","prompt":"Identify the evidence required to understand the current system. Never invent repository facts."},
+    {"id":"architecture","name":"Architecture","role":"Architect","prompt":"Map the objective to likely components, interfaces, dependencies and technical risks."},
+    {"id":"plan","name":"Plan","role":"Planner","prompt":"Create the smallest safe implementation plan with ordered changes and acceptance criteria."},
+    {"id":"implementation","name":"Implementation","role":"Patcher","prompt":"Describe the concrete production-quality code changes that should be made."},
+    {"id":"audit","name":"Audit","role":"Auditor","prompt":"Adversarially inspect the proposed solution for regressions, security issues, edge cases and weak assumptions."},
+    {"id":"validation","name":"Validation","role":"Validator","prompt":"Define tests and checks that prove the objective is satisfied and distinguish executable checks from evidence still required."},
+    {"id":"pr","name":"PR Preparation","role":"PR Steward","prompt":"Prepare a review-ready pull request proposal with title, summary, affected files, validation, risks and reviewer checklist."}
+  ]
+}
