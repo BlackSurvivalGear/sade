@@ -6,6 +6,7 @@ const { generatePatches } = require('./patcher');
 const { auditPatches } = require('./auditor');
 const { validatePatches } = require('./validator');
 const { writeApprovedProposal } = require('./writer');
+const { createApprovedPullRequest } = require('./pr-steward');
 
 admin.initializeApp();
 
@@ -84,6 +85,18 @@ async function installationToken(owner, repo, write = false) {
   return token.token;
 }
 
+async function pullRequestInstallationToken(owner, repo) {
+  const config = githubAppConfig.value();
+  if (!config?.appId || !config?.privateKey) throw new Error('SADE_GITHUB_APP is not configured.');
+  const jwt = appJwt(config);
+  const installation = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`, jwt);
+  const token = await githubRequest(`/app/installations/${installation.id}/access_tokens`, jwt, {
+    method: 'POST',
+    body: JSON.stringify({ repositories: [repo], permissions: { contents: 'read', pull_requests: 'write' } })
+  });
+  return token.token;
+}
+
 function selectRelevantFiles(tree) {
   const priority = /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|vite\.config\.|next\.config\.|firebase\.json|README|tsconfig\.json|jsconfig\.json|src\/|app\/|lib\/|functions\/|config\/|docs\/)/i;
   return (tree.tree || []).filter(item => item.type === 'blob' && item.size <= MAX_FILE_BYTES)
@@ -147,7 +160,7 @@ exports.runEngineering = onRequest({ region: 'europe-west2', secrets: [githubApp
 
 exports.generatePatches = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
   cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
-  try { await requireUser(req); const { objective, owner, repo, branch } = req.body || {}; if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' }); const context = await inspectRepository(owner, repo, branch); const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() }); return send(res, 200, { repository: context.repository, branch, patches, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } }); }
+  try { await requireUser(req); const { objective, owner, repo, branch } = req.body || {}; if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, repo and branch are required.' }); const context = await inspectRepository(owner, repo, branch); const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() }); return send(res, 200, { repository: context.repository, branch, patches, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } }); }
   catch (error) { console.error('generatePatches', error); return send(res, error.status || 500, { error: error.message }); }
 });
 
@@ -171,4 +184,31 @@ exports.applyApprovedPatches = onRequest({ region: 'europe-west2', secrets: [git
     const result = await writeApprovedProposal({ githubRequest, installationToken: token, owner, repo, baseBranch: branch, objective, patches: fresh.patches, validation: fresh.validation });
     return send(res, 200, { user: user.uid, status: 'WRITTEN_TO_FEATURE_BRANCH', ...result, baseBranch: branch, mergeAllowed: false });
   } catch (error) { console.error('applyApprovedPatches', error); return send(res, error.status || 500, { error: error.message }); }
+});
+
+exports.createPullRequest = onRequest({ region: 'europe-west2', secrets: [githubAppConfig], timeoutSeconds: 120 }, async (req, res) => {
+  cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
+  try {
+    const user = await requireUser(req);
+    const { objective, owner, repo, baseBranch, featureBranch, commitSha, proposalHash, approval, validation, auditSummary } = req.body || {};
+    if (!objective || !owner || !repo || !baseBranch || !featureBranch || !approval || !validation) {
+      return send(res, 400, { error: 'Explicit human approval, objective, repository, branches and validation are required.' });
+    }
+    const token = await pullRequestInstallationToken(owner, repo);
+    const result = await createApprovedPullRequest({
+      githubRequest,
+      installationToken: token,
+      owner,
+      repo,
+      objective,
+      baseBranch,
+      featureBranch,
+      commitSha,
+      validation,
+      approval,
+      auditSummary,
+      proposalHash
+    });
+    return send(res, 200, { user: user.uid, ...result, mergeAllowed: false });
+  } catch (error) { console.error('createPullRequest', error); return send(res, error.status || 500, { error: error.message }); }
 });
