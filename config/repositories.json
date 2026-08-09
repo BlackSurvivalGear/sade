@@ -1,0 +1,36 @@
+{
+  "mode": "preview",
+  "description": "Frontend repository-selection data used until the SADE GitHub OAuth/API service is connected.",
+  "repositories": [
+    {
+      "fullName": "BlackSurvivalGear/oriki",
+      "owner": "BlackSurvivalGear",
+      "name": "oriki",
+      "initials": "OR",
+      "language": "JavaScript",
+      "defaultBranch": "main",
+      "description": "ORÍKÍ AI platform",
+      "branches": ["main", "feature/oriki-news"]
+    },
+    {
+      "fullName": "BlackSurvivalGear/AfricanEye",
+      "owner": "BlackSurvivalGear",
+      "name": "AfricanEye",
+      "initials": "AE",
+      "language": "JavaScript",
+      "defaultBranch": "main",
+      "description": "African intelligence and OSINT platform",
+      "branches": ["main", "develop"]
+    },
+    {
+      "fullName": "BlackSurvivalGear/QuantisAI",
+      "owner": "BlackSurvivalGear",
+      "name": "QuantisAI",
+      "initials": "QA",
+      "language": "JavaScript",
+      "defaultBranch": "main",
+      "description": "AI quantity surveying platform",
+      "branches": ["main", "develop"]
+    }
+  ]
+}
