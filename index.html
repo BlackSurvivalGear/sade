@@ -28,7 +28,7 @@
       <section class="hero">
         <div class="kicker">ENGINEERING COMMAND CENTRE</div>
         <h1>Give SADE a prompt.<br><span>Let the pipeline engineer.</span></h1>
-        <p>SADE can run in design mode or, once the Firebase backend is configured, inspect a real repository and produce repository-specific engineering recommendations and code changes.</p>
+        <p>SADE can run in design mode or, once the Firebase backend is configured, inspect a real repository and produce repository-specific engineering recommendations, code patches, audits and validation decisions.</p>
 
         <div class="config">
           <input id="apiKey" class="field" type="password" placeholder="OpenAI API key — design mode only" autocomplete="off">
@@ -52,6 +52,21 @@
           <div class="result-head"><strong>SADE ENGINEERING OUTPUT</strong><span id="modelUsed">—</span></div>
           <div id="result" class="result-body">Enter an engineering prompt. SADE will process it through the pipeline.</div>
         </section>
+
+        <section class="result" id="patchResult" hidden>
+          <div class="result-head"><strong>SADE PATCHER — PROPOSED CHANGES</strong><span id="patchCount">0 files</span></div>
+          <div id="patches" class="result-body"></div>
+        </section>
+
+        <section class="result" id="auditResult" hidden>
+          <div class="result-head"><strong>SADE AUDITOR — SECURITY & ENGINEERING REVIEW</strong><span id="auditVerdict">—</span></div>
+          <div id="audit" class="result-body"></div>
+        </section>
+
+        <section class="result" id="validationResult" hidden>
+          <div class="result-head"><strong>SADE VALIDATOR — RELEASE GATE</strong><span id="validationVerdict">—</span></div>
+          <div id="validation" class="result-body"></div>
+        </section>
       </section>
     </main>
 
@@ -59,7 +74,7 @@
       <div class="kicker">PIPELINE</div>
       <h2>Specialist workflow</h2>
       <div id="stages"></div>
-      <div class="notice">Repository mode gives Recon actual files. Patcher proposes concrete code. Auditor and Validator challenge the proposed result. Nothing is committed or merged automatically.</div>
+      <div class="notice">Repository mode gives Recon actual files. Patcher proposes concrete code. Auditor challenges the proposal. Validator decides whether it is ready for the future controlled write/PR stage. Nothing is committed or merged automatically.</div>
     </aside>
   </div>
 </div>
@@ -74,6 +89,9 @@
   const result = $('result'), stages = $('stages'), status = $('status'), guidanceState = $('guidanceState');
   const constitutionStatus = $('constitutionStatus'), modelUsed = $('modelUsed'), saveKey = $('saveKey');
   const repository = $('repository'), branch = $('branch'), signIn = $('signIn'), backendState = $('backendState');
+  const patchResult = $('patchResult'), patches = $('patches'), patchCount = $('patchCount');
+  const auditResult = $('auditResult'), audit = $('audit'), auditVerdict = $('auditVerdict');
+  const validationResult = $('validationResult'), validation = $('validation'), validationVerdict = $('validationVerdict');
 
   model.value = SADE_AI.getModel();
   if (SADE_AI.getApiKey()) apiKey.value = '••••••••••••••••';
@@ -103,13 +121,45 @@
     catch (error) { backendState.textContent = error.message; status.textContent = 'AUTH CONFIGURATION REQUIRED'; }
   });
 
+  function renderPatches(payload) {
+    const data = payload?.patches;
+    if (!data || !Array.isArray(data.files)) { patchResult.hidden = true; return; }
+    patchResult.hidden = false;
+    patchCount.textContent = `${data.files.length} file${data.files.length === 1 ? '' : 's'} proposed`;
+    const files = data.files.map(file => `FILE: ${file.path}\nACTION: ${file.action}\nREASON: ${file.reason}\n\n${file.patch || '(no patch content)'}`).join('\n\n────────────────────────────────────────\n\n');
+    const tests = (data.tests || []).map(test => `• ${test}`).join('\n');
+    const risks = (data.risks || []).map(risk => `• ${risk}`).join('\n');
+    patches.textContent = `${data.summary || 'Patcher proposal'}\n\n${files}\n\nTESTS\n${tests || 'None specified.'}\n\nRISKS\n${risks || 'None specified.'}`;
+  }
+
+  function renderAudit(payload) {
+    const data = payload?.audit;
+    if (!data) { auditResult.hidden = true; return; }
+    auditResult.hidden = false;
+    auditVerdict.textContent = data.verdict || '—';
+    const findings = (data.findings || []).map(item => `[${item.severity}] ${item.category} — ${item.file}\n${item.finding}\nRecommendation: ${item.recommendation}`).join('\n\n');
+    const required = (data.requiredChanges || []).map(item => `• ${item}`).join('\n');
+    audit.textContent = `${data.summary || ''}\n\nFINDINGS\n${findings || 'No findings.'}\n\nREQUIRED CHANGES\n${required || 'None.'}`;
+  }
+
+  function renderValidation(payload) {
+    const data = payload?.validation;
+    if (!data) { validationResult.hidden = true; return; }
+    validationResult.hidden = false;
+    validationVerdict.textContent = data.verdict || '—';
+    const checks = (data.checks || []).map(item => `${item.status} — ${item.name}\n${item.details}`).join('\n\n');
+    const actions = (data.requiredActions || []).map(item => `• ${item}`).join('\n');
+    validation.textContent = `${data.summary || ''}\n\nCHECKS\n${checks || 'No checks returned.'}\n\nREQUIRED ACTIONS\n${actions || 'None.'}\n\nWRITE ALLOWED: ${data.writeAllowed === true ? 'YES' : 'NO'}`;
+  }
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (apiKey.value.trim() && !apiKey.value.startsWith('••')) SADE_AI.setApiKey(apiKey.value.trim());
     if (model.value.trim()) SADE_AI.setModel(model.value.trim());
     const text = prompt.value.trim(); if (!text) return;
+    patchResult.hidden = true; auditResult.hidden = true; validationResult.hidden = true;
     result.className = 'result-body';
-    result.textContent = 'SADE is processing Intake → Recon → Architecture → Plan → Implementation → Audit → Validation → PR Preparation…';
+    result.textContent = 'SADE is processing Intake → Recon → Architecture → Plan → Patcher → Auditor → Validator → PR Preparation…';
     modelUsed.textContent = SADE_AI.getModel(); status.textContent = 'PIPELINE RUNNING';
     stages.querySelectorAll('.stage').forEach((stage) => stage.classList.remove('active','done'));
     let index = 0;
@@ -121,6 +171,7 @@
         response = await SADE_BACKEND.runEngineering(text, repository.value.trim(), branch.value.trim());
         result.textContent = `REPOSITORY EVIDENCE\n${response.evidence.filesInspected.length} files inspected on ${response.branch}.\n\n${response.output}`;
         modelUsed.textContent = 'SADE BACKEND · GPT-5.4';
+        renderPatches(response); renderAudit(response); renderValidation(response);
       } else {
         response = await SADE_AI.run(text);
         result.textContent = response.text;
