@@ -1,7 +1,6 @@
 {
   "name": "SADE Agent Architecture",
-  "version": "1.0.0",
-  "inspiration": "Devika agent pipeline concepts, reimplemented for SADE",
+  "version": "1.1.0",
   "principles": [
     "GitHub remains the system of record for source code and engineering artefacts.",
     "Agents propose structured work; execution is policy-controlled.",
@@ -11,9 +10,9 @@
   ],
   "agents": [
     {"id":"orchestrator","name":"SADE Orchestrator","role":"Own task state, route work between specialist agents and enforce workflow policy."},
-    {"id":"planner","name":"Planner","role":"Convert the Commander objective into an explicit, ordered engineering plan."},
     {"id":"recon","name":"Recon","role":"Inspect repository structure, branches, dependencies, history and relevant files before implementation."},
     {"id":"researcher","name":"Researcher","role":"Gather authoritative technical context and repository documentation when the task requires external knowledge."},
+    {"id":"planner","name":"Planner","role":"Convert the Commander objective into an explicit, ordered engineering plan."},
     {"id":"coder","name":"Code Engineer","role":"Design and implement production changes using structured file operations."},
     {"id":"tester","name":"Tester","role":"Run appropriate checks and capture reproducible evidence of success or failure."},
     {"id":"patcher","name":"Patcher","role":"Diagnose failed checks and make targeted corrective changes before retesting."},
@@ -21,23 +20,12 @@
     {"id":"auditor","name":"Diff Auditor","role":"Review changed files, scope, security, regressions and unintended changes."},
     {"id":"git","name":"Git / PR Engineer","role":"Prepare branches, commits and pull requests while respecting SADE merge policy."}
   ],
-  "flow": [
-    "orchestrator",
-    "recon",
-    "researcher",
-    "planner",
-    "coder",
-    "tester",
-    "patcher",
-    "browser",
-    "auditor",
-    "git"
-  ],
+  "flow": ["orchestrator","recon","researcher","planner","coder","tester","patcher","browser","auditor","git"],
   "failurePolicy": {
-    "testFailure": "return-to-patcher",
-    "auditFinding": "return-to-coder",
-    "verificationFailure": "return-to-patcher",
-    "unresolvedFailure": "stop-and-report",
-    "merge": "commander-approval-required"
+    "testFailure":"return-to-patcher",
+    "auditFinding":"return-to-coder",
+    "verificationFailure":"return-to-patcher",
+    "unresolvedFailure":"stop-and-report",
+    "merge":"commander-approval-required"
   }
 }
