@@ -11,6 +11,10 @@ function configuredClientId() {
   return localStorage.getItem(CLIENT_KEY) || '';
 }
 
+function configuredAuthApiUrl() {
+  return window.SADE_GITHUB_APP?.authApiUrl || '/api/github/token';
+}
+
 function saveClientId(clientId) {
   localStorage.setItem(CLIENT_KEY, clientId.trim());
 }
@@ -76,27 +80,28 @@ async function beginWebAuth() {
   window.location.assign(`${GITHUB_OAUTH}/login/oauth/authorize?${params.toString()}`);
 }
 
-async function exchangeAuthorizationCode(code, verifier, callbackUri) {
-  const clientId = configuredClientId();
-  const response = await fetch(`${GITHUB_OAUTH}/login/oauth/access_token`, {
+async function callAuthApi(payload) {
+  const response = await fetch(configuredAuthApiUrl(), {
     method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-    },
-    body: new URLSearchParams({
-      client_id: clientId,
-      code,
-      redirect_uri: callbackUri,
-      code_verifier: verifier
-    })
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(payload)
   });
 
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error || !data.access_token) {
-    throw new Error(data.error_description || data.error || `GitHub OAuth error ${response.status}`);
+  if (!response.ok || data.error) {
+    throw new Error(data.error_description || data.error || `SADE authentication error ${response.status}`);
   }
   return data;
+}
+
+async function exchangeAuthorizationCode(code, verifier, callbackUri) {
+  return callAuthApi({
+    action: 'exchange',
+    code,
+    code_verifier: verifier,
+    redirect_uri: callbackUri
+  });
 }
 
 function normaliseToken(token) {
@@ -139,10 +144,18 @@ async function handleOAuthCallback() {
 }
 
 async function refreshAccessToken() {
-  // The browser-only PKCE flow intentionally does not expose the App client secret.
-  // When the short-lived user token expires, reconnect through GitHub.
-  clearAuth();
-  return null;
+  const auth = readAuth();
+  if (!auth?.refreshToken) return null;
+
+  try {
+    const token = await callAuthApi({ action: 'refresh', refresh_token: auth.refreshToken });
+    const refreshed = normaliseToken(token);
+    writeAuth(refreshed);
+    return refreshed;
+  } catch {
+    clearAuth();
+    return null;
+  }
 }
 
 async function ensureToken() {
