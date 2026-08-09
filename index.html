@@ -28,7 +28,7 @@
       <section class="hero">
         <div class="kicker">ENGINEERING COMMAND CENTRE</div>
         <h1>Give SADE a prompt.<br><span>Let the pipeline engineer.</span></h1>
-        <p>SADE can run in design mode or, once the Firebase backend is configured, inspect a real repository and produce repository-specific engineering recommendations and code changes.</p>
+        <p>SADE can run in design mode or, once the Firebase backend is configured, inspect a real repository and produce repository-specific engineering recommendations and code patches.</p>
 
         <div class="config">
           <input id="apiKey" class="field" type="password" placeholder="OpenAI API key — design mode only" autocomplete="off">
@@ -52,6 +52,11 @@
           <div class="result-head"><strong>SADE ENGINEERING OUTPUT</strong><span id="modelUsed">—</span></div>
           <div id="result" class="result-body">Enter an engineering prompt. SADE will process it through the pipeline.</div>
         </section>
+
+        <section class="result" id="patchResult" hidden>
+          <div class="result-head"><strong>SADE PATCHER — PROPOSED CHANGES</strong><span id="patchCount">0 files</span></div>
+          <div id="patches" class="result-body"></div>
+        </section>
       </section>
     </main>
 
@@ -74,6 +79,7 @@
   const result = $('result'), stages = $('stages'), status = $('status'), guidanceState = $('guidanceState');
   const constitutionStatus = $('constitutionStatus'), modelUsed = $('modelUsed'), saveKey = $('saveKey');
   const repository = $('repository'), branch = $('branch'), signIn = $('signIn'), backendState = $('backendState');
+  const patchResult = $('patchResult'), patches = $('patches'), patchCount = $('patchCount');
 
   model.value = SADE_AI.getModel();
   if (SADE_AI.getApiKey()) apiKey.value = '••••••••••••••••';
@@ -103,11 +109,23 @@
     catch (error) { backendState.textContent = error.message; status.textContent = 'AUTH CONFIGURATION REQUIRED'; }
   });
 
+  function renderPatches(payload) {
+    const data = payload?.patches;
+    if (!data || !Array.isArray(data.files)) { patchResult.hidden = true; return; }
+    patchResult.hidden = false;
+    patchCount.textContent = `${data.files.length} file${data.files.length === 1 ? '' : 's'} proposed`;
+    const files = data.files.map(file => `FILE: ${file.path}\nACTION: ${file.action}\nREASON: ${file.reason}\n\n${file.patch || '(no patch content)'}`).join('\n\n────────────────────────────────────────\n\n');
+    const tests = (data.tests || []).map(test => `• ${test}`).join('\n');
+    const risks = (data.risks || []).map(risk => `• ${risk}`).join('\n');
+    patches.textContent = `${data.summary || 'Patcher proposal'}\n\n${files}\n\nTESTS\n${tests || 'None specified.'}\n\nRISKS\n${risks || 'None specified.'}`;
+  }
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (apiKey.value.trim() && !apiKey.value.startsWith('••')) SADE_AI.setApiKey(apiKey.value.trim());
     if (model.value.trim()) SADE_AI.setModel(model.value.trim());
     const text = prompt.value.trim(); if (!text) return;
+    patchResult.hidden = true;
     result.className = 'result-body';
     result.textContent = 'SADE is processing Intake → Recon → Architecture → Plan → Implementation → Audit → Validation → PR Preparation…';
     modelUsed.textContent = SADE_AI.getModel(); status.textContent = 'PIPELINE RUNNING';
@@ -121,6 +139,7 @@
         response = await SADE_BACKEND.runEngineering(text, repository.value.trim(), branch.value.trim());
         result.textContent = `REPOSITORY EVIDENCE\n${response.evidence.filesInspected.length} files inspected on ${response.branch}.\n\n${response.output}`;
         modelUsed.textContent = 'SADE BACKEND · GPT-5.4';
+        renderPatches(response);
       } else {
         response = await SADE_AI.run(text);
         result.textContent = response.text;
