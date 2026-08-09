@@ -1,0 +1,19 @@
+{
+  "name": "SADE Engineering Workflow",
+  "version": "1.0.0",
+  "prPolicy": {
+    "draftPrAllowed": false,
+    "mergeRequiresCommanderApproval": true
+  },
+  "stages": [
+    {"id":"inspect-repository","number":1,"name":"Inspect repository","prompt":"prompts/workflow/01-inspect-repository.md"},
+    {"id":"understand-architecture","number":2,"name":"Understand architecture","prompt":"prompts/workflow/02-understand-architecture.md"},
+    {"id":"plan-implementation","number":3,"name":"Plan implementation","prompt":"prompts/workflow/03-plan-implementation.md"},
+    {"id":"write-production-code","number":4,"name":"Write production code","prompt":"prompts/workflow/04-write-production-code.md"},
+    {"id":"run-tests","number":5,"name":"Run tests","prompt":"prompts/workflow/05-run-tests.md"},
+    {"id":"audit-diff","number":6,"name":"Audit diff","prompt":"prompts/workflow/06-audit-diff.md"},
+    {"id":"fix-findings","number":7,"name":"Fix findings","prompt":"prompts/workflow/07-fix-findings.md"},
+    {"id":"validate","number":8,"name":"Validate","prompt":"prompts/workflow/08-validate.md"},
+    {"id":"prepare-pr","number":9,"name":"Prepare PR","prompt":"prompts/workflow/09-prepare-pr.md"}
+  ]
+}

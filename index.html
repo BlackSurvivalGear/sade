@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#050505">
   <meta name="description" content="SADE AI — African AI Software Engineering Agent">
-  <link rel="icon" type="image/png" href="favi.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="assets/brand/favi.png">
+  <link rel="stylesheet" href="css/styles.css">
   <title>SADE AI — African AI Software Engineering Agent</title>
 </head>
 <body>
@@ -16,15 +16,13 @@
   <main id="landing" class="landing">
     <div class="hero-card">
       <div class="hero-logo-wrap">
-        <img class="hero-logo" src="sadelogo.png" alt="SADE AI — African AI Software Engineering Agent">
+        <img class="hero-logo" src="assets/brand/sadelogo.png" alt="SADE AI — African AI Software Engineering Agent">
       </div>
       <div class="hero-copy">
         <div class="eyebrow">AFRICAN AI SOFTWARE ENGINEERING AGENT</div>
         <h1>Build with <span>SADE AI.</span></h1>
         <p>Inspect. Understand. Plan. Code. Test. Audit. Fix. Validate. PR.</p>
-        <button id="launchButton" class="launch-button" type="button">
-          <span>Launch SADE</span><span class="arrow">→</span>
-        </button>
+        <button id="launchButton" class="launch-button" type="button"><span>Launch SADE</span><span class="arrow">→</span></button>
         <div class="hero-status"><span class="status-dot"></span> Engineering environment ready</div>
       </div>
     </div>
@@ -34,7 +32,7 @@
   <main id="workspace" class="workspace hidden" aria-label="SADE AI engineering workspace">
     <header class="topbar">
       <div class="brand-mini">
-        <img src="favi.png" alt="SADE AI">
+        <img src="assets/brand/favi.png" alt="SADE AI">
         <div><strong>SADE AI</strong><small>Software Engineering Agent</small></div>
       </div>
       <div class="topbar-actions">
@@ -51,19 +49,13 @@
 
       <section class="chat-panel">
         <div class="chat-header">
-          <div>
-            <div class="chat-title">New engineering session</div>
-            <div class="chat-subtitle">Repository-aware development workspace</div>
-          </div>
+          <div><div class="chat-title">New engineering session</div><div class="chat-subtitle">Repository-aware development workspace</div></div>
           <div class="repo-chip">GITHUB · READY</div>
         </div>
         <div id="chatMessages" class="chat-messages" aria-live="polite">
           <div class="welcome-message">
-            <img src="favi.png" alt="">
-            <div>
-              <strong>Hello, Commander.</strong>
-              <p>I’m SADE. Tell me what you want built, fixed, audited or deployed. I’ll follow the engineering workflow before preparing a review-ready PR.</p>
-            </div>
+            <img src="assets/brand/favi.png" alt="">
+            <div><strong>Hello, Commander.</strong><p>I’m SADE. Tell me what you want built, fixed, audited or deployed. I’ll follow the engineering workflow before preparing a review-ready PR.</p></div>
           </div>
         </div>
         <form id="chatForm" class="composer">
@@ -76,14 +68,11 @@
         <div class="panel-heading"><span>Work progress</span><span class="progress-percent">0%</span></div>
         <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
         <div id="progressSteps" class="progress-steps"></div>
-        <div class="agent-card">
-          <div class="agent-avatar"><img src="favi.png" alt="SADE AI"></div>
-          <div><strong>SADE AI</strong><small>Senior Software Engineer</small></div>
-        </div>
+        <div class="agent-card"><div class="agent-avatar"><img src="assets/brand/favi.png" alt="SADE AI"></div><div><strong>SADE AI</strong><small>Senior Software Engineer</small></div></div>
       </aside>
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
