@@ -1,267 +1,164 @@
-const fallbackSteps = [
-  'Inspect repository',
-  'Understand architecture',
-  'Plan implementation',
-  'Write production code',
-  'Run tests',
-  'Audit diff',
-  'Fix findings',
-  'Validate',
-  'Prepare PR'
-];
-
+const fallbackSteps = ['Inspect repository','Understand architecture','Plan implementation','Write production code','Run tests','Audit diff','Fix findings','Validate','Prepare PR'];
+const SESSION_KEY = 'sade.engineering.sessions.v1';
 const state = {
-  githubConnected: false,
-  previewMode: false,
-  repositories: [],
-  selectedRepository: null,
-  selectedBranch: null,
-  sessions: [
-    { title: 'New engineering session', time: 'Just now' },
-    { title: 'Repository architecture', time: 'Earlier today' },
-    { title: 'PR audit', time: 'Yesterday' }
-  ],
-  steps: fallbackSteps,
-  progressIndex: 0
+  githubConnected: SADE_GitHub.isConnected(),
+  repositories: [], selectedRepository: null, selectedBranch: null, selectedTree: null,
+  currentSessionId: null, steps: fallbackSteps, progressIndex: 0,
+  sessions: loadSessions()
 };
 
 const $ = (selector) => document.querySelector(selector);
-const repositoryHome = $('#repositoryHome');
-const workspace = $('#workspace');
-const connectGithub = $('#connectGithub');
-const connectGithubSecondary = $('#connectGithubSecondary');
-const connectionPill = $('#connectionPill');
-const accountChip = $('#accountChip');
-const repoSubtitle = $('#repoSubtitle');
-const repoSearch = $('#repoSearch');
-const repoList = $('#repoList');
-const workspaceRepo = $('#workspaceRepo');
-const chatSubtitle = $('#chatSubtitle');
-const repoChip = $('#repoChip');
-const sessionsEl = $('#sessions');
-const sessionCount = $('#sessionCount');
-const newSessionButton = $('#newSessionButton');
-const backHomeButton = $('#backHomeButton');
-const chatForm = $('#chatForm');
-const messageInput = $('#messageInput');
-const chatMessages = $('#chatMessages');
-const progressSteps = $('#progressSteps');
-const progressBar = $('#progressBar');
-const progressPercent = $('.progress-percent');
+const repositoryHome = $('#repositoryHome'), workspace = $('#workspace');
+const connectGithub = $('#connectGithub'), connectGithubSecondary = $('#connectGithubSecondary');
+const connectionPill = $('#connectionPill'), accountChip = $('#accountChip'), repoSubtitle = $('#repoSubtitle');
+const repoSearch = $('#repoSearch'), repoList = $('#repoList'), workspaceRepo = $('#workspaceRepo');
+const chatSubtitle = $('#chatSubtitle'), repoChip = $('#repoChip'), sessionsEl = $('#sessions'), sessionCount = $('#sessionCount');
+const newSessionButton = $('#newSessionButton'), backHomeButton = $('#backHomeButton');
+const chatForm = $('#chatForm'), messageInput = $('#messageInput'), chatMessages = $('#chatMessages');
+const progressSteps = $('#progressSteps'), progressBar = $('#progressBar'), progressPercent = $('.progress-percent');
+const authModal = $('#authModal'), authClientId = $('#authClientId'), authStatus = $('#authStatus'), deviceCode = $('#deviceCode');
+const authStart = $('#authStart'), authCancel = $('#authCancel'), authOpen = $('#authOpen');
+const filesButton = $('#filesButton'), fileModal = $('#fileModal'), fileList = $('#fileList'), fileContent = $('#fileContent'), fileMeta = $('#fileMeta');
+const fileClose = $('#fileClose');
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>\"']/g, (character) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[character]));
+function loadSessions() { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '[]'); } catch { return []; } }
+function saveSessions() { localStorage.setItem(SESSION_KEY, JSON.stringify(state.sessions.slice(0, 50))); }
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>\"']/g, (character) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character])); }
+function initials(name) { return String(name || 'GH').split(/[^a-z0-9]+/i).filter(Boolean).slice(0,2).map((part) => part[0]).join('').toUpperCase() || 'GH'; }
+function formatTime(value) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(value)); }
+function repoFromApi(repository) {
+  return { fullName: repository.full_name, owner: repository.owner.login, name: repository.name, description: repository.description || 'No description provided.', language: repository.language || 'Unknown', defaultBranch: repository.default_branch, private: repository.private, updatedAt: repository.updated_at, branches: [] };
 }
 
-function renderConnectionState() {
-  if (state.githubConnected) {
-    connectionPill.classList.add('connected');
-    connectionPill.innerHTML = '<span class="status-dot"></span> GITHUB · PREVIEW CONNECTED';
-    connectGithub.textContent = 'GitHub settings';
-    repoSearch.disabled = false;
-    accountChip.hidden = false;
-    accountChip.textContent = 'BlackSurvivalGear';
-    repoSubtitle.textContent = 'Repository data is ready for selection. Live OAuth will replace this preview connection.';
-  } else {
-    connectionPill.classList.remove('connected');
-    connectionPill.innerHTML = '<span class="status-dot muted"></span> GITHUB NOT CONNECTED';
-    connectGithub.textContent = 'Connect GitHub';
-    repoSearch.disabled = true;
-    accountChip.hidden = true;
-    repoSubtitle.textContent = 'Connect GitHub to load your repositories.';
-  }
+function renderConnectionState(user = null) {
+  const connected = state.githubConnected;
+  connectionPill.classList.toggle('connected', connected);
+  connectionPill.innerHTML = connected ? '<span class="status-dot"></span> GITHUB · CONNECTED' : '<span class="status-dot muted"></span> GITHUB NOT CONNECTED';
+  connectGithub.textContent = connected ? 'GitHub connected' : 'Connect GitHub';
+  repoSearch.disabled = !connected;
+  accountChip.hidden = !connected;
+  accountChip.textContent = user?.login || 'GitHub account';
+  repoSubtitle.textContent = connected ? 'Live repositories from the connected GitHub account.' : 'Connect GitHub to load your repositories.';
 }
 
 function renderRepositories(filter = '') {
   if (!state.githubConnected) {
-    repoList.innerHTML = `
-      <div class="connection-empty">
-        <div class="empty-icon">GH</div>
-        <strong>Connect GitHub to begin</strong>
-        <p>SADE will use authorised GitHub access to discover repositories, branches and engineering sessions.</p>
-        <button id="connectGithubInline" class="launch-button" type="button">Connect GitHub <span class="arrow">→</span></button>
-      </div>`;
-    $('#connectGithubInline').addEventListener('click', connectGitHubPreview);
+    repoList.innerHTML = '<div class="connection-empty"><div class="empty-icon">GH</div><strong>Connect GitHub to begin</strong><p>SADE will use your authorised GitHub App access to discover repositories, branches and files.</p><button id="connectGithubInline" class="launch-button" type="button">Connect GitHub <span class="arrow">→</span></button></div>';
+    $('#connectGithubInline').addEventListener('click', openAuth);
     return;
   }
-
   const query = filter.trim().toLowerCase();
-  const repositories = state.repositories.filter((repository) => {
-    return !query || `${repository.owner}/${repository.name} ${repository.description} ${repository.language}`.toLowerCase().includes(query);
-  });
-
-  if (!repositories.length) {
-    repoList.innerHTML = '<div class="connection-empty"><div class="empty-icon">⌕</div><strong>No repositories found</strong><p>Try another repository name.</p></div>';
-    return;
-  }
-
-  repoList.innerHTML = repositories.map((repository) => `
-    <button class="repo-card" type="button" data-repository="${escapeHtml(repository.fullName)}">
-      <span class="repo-avatar">${escapeHtml(repository.initials)}</span>
-      <span class="repo-main">
-        <span class="repo-name">${escapeHtml(repository.owner)} <span>/ ${escapeHtml(repository.name)}</span></span>
-        <span class="repo-meta">${escapeHtml(repository.language)} · ${escapeHtml(repository.defaultBranch)} · ${escapeHtml(repository.description)}</span>
-      </span>
-      <span class="repo-arrow" aria-hidden="true">›</span>
-    </button>`).join('');
-
-  repoList.querySelectorAll('[data-repository]').forEach((button) => {
-    button.addEventListener('click', () => selectRepository(button.dataset.repository));
-  });
+  const repositories = state.repositories.filter((repository) => `${repository.fullName} ${repository.description} ${repository.language}`.toLowerCase().includes(query));
+  if (!repositories.length) { repoList.innerHTML = '<div class="connection-empty"><div class="empty-icon">⌕</div><strong>No repositories found</strong><p>Try another repository name.</p></div>'; return; }
+  repoList.innerHTML = repositories.map((repository) => `<button class="repo-card" type="button" data-repository="${escapeHtml(repository.fullName)}"><span class="repo-avatar">${escapeHtml(initials(repository.name))}</span><span class="repo-main"><span class="repo-name">${escapeHtml(repository.owner)} <span>/ ${escapeHtml(repository.name)}</span></span><span class="repo-meta">${repository.private ? 'Private' : 'Public'} · ${escapeHtml(repository.defaultBranch)} · ${escapeHtml(repository.language)}</span></span><span class="repo-arrow" aria-hidden="true">›</span></button>`).join('');
+  repoList.querySelectorAll('[data-repository]').forEach((button) => button.addEventListener('click', () => selectRepository(button.dataset.repository)));
 }
 
-function selectRepository(fullName) {
+async function loadLiveRepositories() {
+  repoSubtitle.textContent = 'Loading repositories from GitHub…';
+  const data = await SADE_GitHub.listRepositories();
+  state.repositories = data.map(repoFromApi);
+  renderRepositories(repoSearch.value);
+}
+
+async function selectRepository(fullName) {
   const repository = state.repositories.find((item) => item.fullName === fullName);
   if (!repository) return;
   state.selectedRepository = repository;
-  renderBranchSelector(repository);
+  repoList.innerHTML = '<div class="connection-empty"><strong>Loading branches…</strong><p>SADE is reading the live branch list from GitHub.</p></div>';
+  try {
+    const branches = await SADE_GitHub.listBranches(repository.owner, repository.name);
+    repository.branches = branches.map((branch) => branch.name);
+    renderBranchSelector(repository);
+  } catch (error) {
+    repoList.innerHTML = `<div class="connection-empty"><strong>Could not load branches</strong><p>${escapeHtml(error.message)}</p><button id="retryBranches" class="launch-button" type="button">Retry</button></div>`;
+    $('#retryBranches').addEventListener('click', () => selectRepository(fullName));
+  }
 }
 
 function renderBranchSelector(repository) {
-  repoList.innerHTML = `
-    <div class="branch-panel">
-      <button class="back-link" id="backToRepositories" type="button">← All repositories</button>
-      <div class="selected-repo">
-        <div class="repo-avatar">${escapeHtml(repository.initials)}</div>
-        <div><strong>${escapeHtml(repository.owner)} / ${escapeHtml(repository.name)}</strong><small>${escapeHtml(repository.description)}</small></div>
-      </div>
-      <label class="branch-label" for="branchSelect">Working branch</label>
-      <select id="branchSelect" class="branch-select">
-        ${repository.branches.map((branch) => `<option value="${escapeHtml(branch)}" ${branch === repository.defaultBranch ? 'selected' : ''}>${escapeHtml(branch)}${branch === repository.defaultBranch ? ' · default' : ''}</option>`).join('')}
-      </select>
-      <button id="startSessionButton" class="launch-button start-session" type="button">Start engineering session <span class="arrow">→</span></button>
-      <p class="branch-note">SADE will inspect this branch before proposing or making implementation changes.</p>
-    </div>`;
-
+  repoList.innerHTML = `<div class="branch-panel"><button class="back-link" id="backToRepositories" type="button">← All repositories</button><div class="selected-repo"><div class="repo-avatar">${escapeHtml(initials(repository.name))}</div><div><strong>${escapeHtml(repository.fullName)}</strong><small>${escapeHtml(repository.description)}</small></div></div><label class="branch-label" for="branchSelect">Working branch</label><select id="branchSelect" class="branch-select">${repository.branches.map((branch) => `<option value="${escapeHtml(branch)}" ${branch === repository.defaultBranch ? 'selected' : ''}>${escapeHtml(branch)}${branch === repository.defaultBranch ? ' · default' : ''}</option>`).join('')}</select><button id="startSessionButton" class="launch-button start-session" type="button">Start engineering session <span class="arrow">→</span></button><p class="branch-note">SADE will inspect this live branch before proposing implementation changes.</p></div>`;
   $('#backToRepositories').addEventListener('click', () => renderRepositories(repoSearch.value));
-  $('#startSessionButton').addEventListener('click', () => {
-    state.selectedBranch = $('#branchSelect').value;
-    launchWorkspace();
-  });
+  $('#startSessionButton').addEventListener('click', () => { state.selectedBranch = $('#branchSelect').value; launchWorkspace(); });
 }
 
 function renderSessions() {
   sessionCount.textContent = state.sessions.length;
-  sessionsEl.innerHTML = state.sessions.map((session, index) => `
-    <div class="session ${index === 0 ? 'active' : ''}" data-session="${index}">
-      <strong>${escapeHtml(session.title)}</strong>
-      <small>${escapeHtml(session.time)}</small>
-    </div>`).join('');
+  sessionsEl.innerHTML = state.sessions.length ? state.sessions.map((session) => `<button class="session ${session.id === state.currentSessionId ? 'active' : ''}" data-session-id="${escapeHtml(session.id)}"><strong>${escapeHtml(session.title)}</strong><small>${escapeHtml(session.repo)} · ${escapeHtml(session.branch)}</small><small>${formatTime(session.createdAt)}</small></button>`).join('') : '<div class="connection-empty"><strong>No sessions yet</strong><p>Start an engineering session from a repository.</p></div>';
+  sessionsEl.querySelectorAll('[data-session-id]').forEach((button) => button.addEventListener('click', () => restoreSession(button.dataset.sessionId)));
 }
 
 function renderProgress() {
-  progressSteps.innerHTML = state.steps.map((step, index) => {
-    const status = index < state.progressIndex ? 'done' : index === state.progressIndex ? 'current' : '';
-    return `<div class="step ${status}"><span class="step-icon">${index < state.progressIndex ? '✓' : index + 1}</span><span>${escapeHtml(step)}</span></div>`;
-  }).join('');
-
-  const percent = state.progressIndex === 0
-    ? 0
-    : Math.round((state.progressIndex / Math.max(state.steps.length - 1, 1)) * 100);
-  progressBar.style.width = `${percent}%`;
-  progressPercent.textContent = `${percent}%`;
+  progressSteps.innerHTML = state.steps.map((step,index) => { const status=index<state.progressIndex?'done':index===state.progressIndex?'current':''; return `<div class="step ${status}"><span class="step-icon">${index<state.progressIndex?'✓':index+1}</span><span>${escapeHtml(step)}</span></div>`; }).join('');
+  const percent = state.progressIndex === 0 ? 0 : Math.round((state.progressIndex / Math.max(state.steps.length - 1,1))*100);
+  progressBar.style.width = `${percent}%`; progressPercent.textContent = `${percent}%`;
 }
 
-function addMessage(text, type) {
-  const element = document.createElement('div');
-  element.className = `message ${type}`;
-  element.textContent = text;
-  chatMessages.appendChild(element);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
+function addMessage(text,type,save=true) { const element=document.createElement('div'); element.className=`message ${type}`; element.textContent=text; chatMessages.appendChild(element); chatMessages.scrollTop=chatMessages.scrollHeight; if(save) persistCurrentMessages(); }
+function persistCurrentMessages() { const session=state.sessions.find((item)=>item.id===state.currentSessionId); if(!session) return; session.messages=[...chatMessages.querySelectorAll('.message')].map((item)=>({type:item.classList.contains('user')?'user':'sade',text:item.textContent})); session.progressIndex=state.progressIndex; saveSessions(); }
+function renderMessages(session) { chatMessages.innerHTML='<div class="welcome-message"><img src="assets/brand/favi.png" alt=""><div><strong>Engineering session.</strong><p>Repository-aware development workspace.</p></div></div>'; (session?.messages||[]).forEach((message)=>addMessage(message.text,message.type,false)); }
 
-async function loadWorkflow() {
-  try {
-    const response = await fetch('config/engineering-workflow.json', { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Workflow request failed: ${response.status}`);
-    const workflow = await response.json();
-    if (Array.isArray(workflow.stages) && workflow.stages.length) {
-      state.steps = workflow.stages.map((stage) => stage.name);
-    }
-  } catch (error) {
-    console.warn('Using local workflow fallback.', error);
-  }
-  renderProgress();
-}
-
-async function loadRepositories() {
-  try {
-    const response = await fetch('config/repositories.json', { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Repository request failed: ${response.status}`);
-    const data = await response.json();
-    state.repositories = Array.isArray(data.repositories) ? data.repositories : [];
-  } catch (error) {
-    console.warn('Repository preview data unavailable.', error);
-    state.repositories = [];
-  }
-}
-
-async function connectGitHubPreview() {
-  if (state.githubConnected) return;
-  await loadRepositories();
-  state.githubConnected = true;
-  state.previewMode = true;
-  renderConnectionState();
-  renderRepositories();
-}
-
-function launchWorkspace() {
+async function launchWorkspace() {
   if (!state.selectedRepository || !state.selectedBranch) return;
-  repositoryHome.classList.add('hidden');
-  workspace.classList.remove('hidden');
-  const repoName = `${state.selectedRepository.owner} / ${state.selectedRepository.name}`;
-  workspaceRepo.textContent = `${repoName} · ${state.selectedBranch}`;
-  chatSubtitle.textContent = `${repoName} · branch ${state.selectedBranch}`;
-  repoChip.textContent = `GITHUB · ${state.previewMode ? 'PREVIEW' : 'CONNECTED'}`;
-  document.title = `SADE AI — ${repoName}`;
-  renderSessions();
-  renderProgress();
-  messageInput.focus();
+  try {
+    const repository = await SADE_GitHub.getRepository(state.selectedRepository.owner,state.selectedRepository.name);
+    const tree = await SADE_GitHub.getTree(state.selectedRepository.owner,state.selectedRepository.name,state.selectedBranch);
+    state.selectedTree = tree;
+    const session = { id: crypto.randomUUID(), title:'New engineering session', repo:repository.full_name, branch:state.selectedBranch, createdAt:new Date().toISOString(), messages:[], progressIndex:1, fileCount:Array.isArray(tree.tree)?tree.tree.length:0 };
+    state.sessions.unshift(session); state.currentSessionId=session.id; state.progressIndex=1; saveSessions();
+    repositoryHome.classList.add('hidden'); workspace.classList.remove('hidden');
+    workspaceRepo.textContent=`${repository.full_name} · ${state.selectedBranch}`; chatSubtitle.textContent=`${repository.full_name} · ${state.selectedBranch}`; repoChip.textContent='GITHUB · CONNECTED'; document.title=`SADE AI — ${repository.full_name}`;
+    renderSessions(); renderProgress(); renderMessages(session); messageInput.focus();
+  } catch(error) { alert(`SADE could not inspect the repository: ${error.message}`); }
 }
 
-function returnHome() {
-  workspace.classList.add('hidden');
-  repositoryHome.classList.remove('hidden');
-  renderConnectionState();
-  renderRepositories(repoSearch.value);
+function restoreSession(id) {
+  const session=state.sessions.find((item)=>item.id===id); if(!session) return;
+  const [owner,name]=session.repo.split('/'); state.currentSessionId=id; state.selectedRepository={fullName:session.repo,owner,name,name,description:'',language:'',defaultBranch:session.branch,branches:[session.branch]}; state.selectedBranch=session.branch; state.progressIndex=session.progressIndex||0;
+  repositoryHome.classList.add('hidden'); workspace.classList.remove('hidden'); workspaceRepo.textContent=`${session.repo} · ${session.branch}`; chatSubtitle.textContent=`${session.repo} · ${session.branch}`; repoChip.textContent='GITHUB · CONNECTED'; renderSessions(); renderProgress(); renderMessages(session); messageInput.focus();
 }
 
-connectGithub.addEventListener('click', connectGitHubPreview);
-connectGithubSecondary.addEventListener('click', connectGitHubPreview);
-repoSearch.addEventListener('input', () => renderRepositories(repoSearch.value));
-backHomeButton.addEventListener('click', returnHome);
+function returnHome() { workspace.classList.add('hidden'); repositoryHome.classList.remove('hidden'); renderConnectionState(); renderRepositories(repoSearch.value); }
 
-newSessionButton.addEventListener('click', () => {
-  state.sessions.unshift({ title: 'New engineering session', time: 'Just now' });
-  state.progressIndex = 0;
-  renderSessions();
-  renderProgress();
-  chatMessages.innerHTML = `
-    <div class="welcome-message">
-      <img src="assets/brand/favi.png" alt="">
-      <div><strong>New session ready.</strong><p>Give me the engineering task. SADE will begin with repository inspection.</p></div>
-    </div>`;
-  messageInput.focus();
-});
+function openAuth() {
+  authModal.classList.remove('hidden'); authStatus.textContent='Ready to connect to GitHub.'; deviceCode.textContent=''; authOpen.hidden=true;
+  const existing=SADE_GitHub.configuredClientId(); if(existing) authClientId.value=existing;
+  authClientId.focus();
+}
+function closeAuth() { authModal.classList.add('hidden'); }
+async function startAuth() {
+  const clientId=authClientId.value.trim(); if(!clientId){authStatus.textContent='Enter the GitHub App Client ID first.'; return;}
+  SADE_GitHub.saveClientId(clientId); authStart.disabled=true; authClientId.disabled=true; authStatus.textContent='Requesting a secure GitHub device code…';
+  try {
+    const user=await SADE_GitHub.connect((event)=>{
+      if(event.type==='device'){ deviceCode.textContent=event.user_code; authOpen.hidden=false; authStatus.innerHTML=`Enter this code on GitHub. Verification URL: <a class="auth-link" href="${escapeHtml(event.verification_uri)}" target="_blank" rel="noopener">${escapeHtml(event.verification_uri)}</a>`; }
+      if(event.type==='pending') authStatus.textContent=event.message;
+    });
+    state.githubConnected=true; renderConnectionState(user); closeAuth(); await loadLiveRepositories();
+  } catch(error) { authStatus.textContent=error.message; } finally { authStart.disabled=false; authClientId.disabled=false; }
+}
 
-chatForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const text = messageInput.value.trim();
-  if (!text) return;
+function openFiles() { if(!state.selectedRepository||!state.selectedBranch)return; fileModal.classList.remove('hidden'); fileList.innerHTML='<div class="connection-empty"><strong>Loading repository tree…</strong></div>'; fileContent.textContent='Select a file to inspect it.'; fileMeta.textContent=''; loadFiles(); }
+async function loadFiles() {
+  try {
+    const tree=state.selectedTree||await SADE_GitHub.getTree(state.selectedRepository.owner,state.selectedRepository.name,state.selectedBranch); state.selectedTree=tree;
+    const files=(tree.tree||[]).filter((item)=>item.type==='blob').sort((a,b)=>a.path.localeCompare(b.path));
+    fileList.innerHTML=files.length?files.map((file)=>`<button class="file-entry" type="button" data-path="${escapeHtml(file.path)}">${escapeHtml(file.path)}</button>`).join(''):'<div class="connection-empty"><strong>No files found</strong></div>';
+    fileList.querySelectorAll('[data-path]').forEach((button)=>button.addEventListener('click',()=>inspectFile(button.dataset.path,button)));
+    fileMeta.textContent=`${files.length} files · branch ${state.selectedBranch}`;
+  } catch(error) { fileList.innerHTML=`<div class="connection-empty"><strong>Could not load files</strong><p>${escapeHtml(error.message)}</p></div>`; }
+}
+async function inspectFile(path,button) {
+  fileList.querySelectorAll('.file-entry').forEach((item)=>item.classList.remove('active')); button.classList.add('active'); fileContent.textContent='Loading file…';
+  try { const file=await SADE_GitHub.getFile(state.selectedRepository.owner,state.selectedRepository.name,path,state.selectedBranch); if(file.encoding==='base64'){ const bytes=Uint8Array.from(atob(file.content.replace(/\n/g,'')),(char)=>char.charCodeAt(0)); fileContent.textContent=new TextDecoder().decode(bytes); } else fileContent.textContent=file.content||''; fileMeta.textContent=`${path} · ${file.size||0} bytes`; }
+  catch(error){fileContent.textContent=`Unable to read file: ${error.message}`;}
+}
 
-  addMessage(text, 'user');
-  messageInput.value = '';
-  state.progressIndex = Math.max(state.progressIndex, 1);
-  renderProgress();
+connectGithub.addEventListener('click',openAuth); connectGithubSecondary.addEventListener('click',openAuth); repoSearch.addEventListener('input',()=>renderRepositories(repoSearch.value));
+backHomeButton.addEventListener('click',returnHome); authCancel.addEventListener('click',closeAuth); authStart.addEventListener('click',startAuth); authOpen.addEventListener('click',()=>{}); filesButton.addEventListener('click',openFiles); fileClose.addEventListener('click',()=>fileModal.classList.add('hidden'));
+newSessionButton.addEventListener('click',returnHome);
+chatForm.addEventListener('submit',(event)=>{ event.preventDefault(); const text=messageInput.value.trim(); if(!text)return; addMessage(text,'user'); messageInput.value=''; state.progressIndex=Math.max(state.progressIndex,2); renderProgress(); persistCurrentMessages(); window.setTimeout(()=>addMessage(`Understood. I will work against ${state.selectedRepository?.fullName||'the selected repository'} on branch ${state.selectedBranch||'main'}. The repository is connected directly through GitHub.`, 'sade'),350); });
 
-  window.setTimeout(() => {
-    addMessage(`Understood. I will inspect ${state.selectedRepository?.fullName || 'the selected repository'} on branch ${state.selectedBranch || 'main'} before making changes.`, 'sade');
-  }, 350);
-});
+async function loadWorkflow(){try{const response=await fetch('config/engineering-workflow.json',{cache:'no-store'});if(response.ok){const workflow=await response.json();if(Array.isArray(workflow.stages)&&workflow.stages.length)state.steps=workflow.stages.map((stage)=>stage.name);}}catch(error){console.warn('Using local workflow fallback.',error);}renderProgress();}
 
-renderConnectionState();
-renderRepositories();
-renderProgress();
-loadWorkflow();
+renderConnectionState(); renderRepositories(); renderSessions(); renderProgress(); loadWorkflow();
