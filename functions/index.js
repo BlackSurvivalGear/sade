@@ -3,6 +3,8 @@ const { defineJsonSecret, defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('node:crypto');
 const { generatePatches } = require('./patcher');
+const { auditPatches } = require('./auditor');
+const { validatePatches } = require('./validator');
 
 admin.initializeApp();
 
@@ -120,6 +122,13 @@ async function runOpenAI(objective, context) {
   return data.output_text || (data.output || []).flatMap(item => item.content || []).map(item => item.text || '').join('\n').trim();
 }
 
+async function buildAuditedProposal(objective, context) {
+  const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() });
+  const audit = await auditPatches({ objective, context, patches, apiKey: openaiApiKey.value() });
+  const validation = await validatePatches({ objective, context, patches, audit, apiKey: openaiApiKey.value() });
+  return { patches, audit, validation };
+}
+
 exports.inspectRepository = onRequest({ region: 'europe-west2', secrets: [githubAppConfig] }, async (req, res) => {
   cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
   try { await requireUser(req); const { owner, repo, branch } = req.body || {}; if (!owner || !repo || !branch) return send(res, 400, { error: 'owner, repo and branch are required.' }); return send(res, 200, await inspectRepository(owner, repo, branch)); }
@@ -134,19 +143,19 @@ exports.runEngineering = onRequest({ region: 'europe-west2', secrets: [githubApp
     if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' });
     const context = await inspectRepository(owner, repo, branch);
     const output = await runOpenAI(objective, context);
-    const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() });
-    return send(res, 200, { user: user.uid, repository: context.repository, branch, output, patches, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } });
+    const proposal = await buildAuditedProposal(objective, context);
+    return send(res, 200, { user: user.uid, repository: context.repository, branch, output, ...proposal, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } });
   } catch (error) { console.error('runEngineering', error); return send(res, error.status || 500, { error: error.message }); }
 });
 
 exports.generatePatches = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
   cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
-  try {
-    await requireUser(req);
-    const { objective, owner, repo, branch } = req.body || {};
-    if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' });
-    const context = await inspectRepository(owner, repo, branch);
-    const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() });
-    return send(res, 200, { repository: context.repository, branch, patches, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } });
-  } catch (error) { console.error('generatePatches', error); return send(res, error.status || 500, { error: error.message }); }
+  try { await requireUser(req); const { objective, owner, repo, branch } = req.body || {}; if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' }); const context = await inspectRepository(owner, repo, branch); const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() }); return send(res, 200, { repository: context.repository, branch, patches, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } }); }
+  catch (error) { console.error('generatePatches', error); return send(res, error.status || 500, { error: error.message }); }
+});
+
+exports.auditAndValidate = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
+  cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
+  try { await requireUser(req); const { objective, owner, repo, branch } = req.body || {}; if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' }); const context = await inspectRepository(owner, repo, branch); const proposal = await buildAuditedProposal(objective, context); return send(res, 200, { repository: context.repository, branch, ...proposal, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } }); }
+  catch (error) { console.error('auditAndValidate', error); return send(res, error.status || 500, { error: error.message }); }
 });
