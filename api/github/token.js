@@ -11,16 +11,13 @@ function json(res, status, body, origin) {
   return res.json(body);
 }
 
-function allowedOrigin() {
-  return process.env.SADE_ALLOWED_ORIGIN || '';
-}
-
 export default async function handler(req, res) {
   const origin = req.headers.origin || '';
-  const configuredOrigin = allowedOrigin();
+  const configuredOrigin = process.env.SADE_ALLOWED_ORIGIN || '';
+  const callbackUrl = process.env.SADE_CALLBACK_URL || '';
 
-  if (!configuredOrigin) {
-    return json(res, 500, { error: 'SADE_ALLOWED_ORIGIN is not configured.' });
+  if (!configuredOrigin || !callbackUrl) {
+    return json(res, 500, { error: 'SADE_ALLOWED_ORIGIN and SADE_CALLBACK_URL must be configured.' });
   }
 
   if (origin !== configuredOrigin) {
@@ -67,8 +64,8 @@ export default async function handler(req, res) {
       return json(res, 400, { error: 'code, code_verifier and redirect_uri are required.' }, configuredOrigin);
     }
 
-    if (body.redirect_uri !== configuredOrigin) {
-      return json(res, 400, { error: 'redirect_uri must exactly match SADE_ALLOWED_ORIGIN.' }, configuredOrigin);
+    if (body.redirect_uri !== callbackUrl) {
+      return json(res, 400, { error: 'redirect_uri does not match the configured SADE callback URL.' }, configuredOrigin);
     }
 
     params = {
