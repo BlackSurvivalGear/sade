@@ -1,0 +1,50 @@
+name: SADE Backend CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    paths:
+      - 'functions/**'
+      - 'firebase.json'
+      - 'firestore.rules'
+      - '.github/workflows/backend-ci.yml'
+
+jobs:
+  backend-validation:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package.json
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Syntax check backend
+        run: |
+          set -e
+          for file in *.js; do
+            node --check "$file"
+          done
+
+      - name: Verify Firebase configuration
+        working-directory: .
+        run: node --check functions/index.js
+
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
