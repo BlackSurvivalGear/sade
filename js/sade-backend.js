@@ -28,17 +28,26 @@ const SADE_BACKEND = (() => {
     return data;
   }
 
-  async function inspectRepository(repository, branch) {
-    const [owner, repo] = repository.split('/');
+  function splitRepository(repository) {
+    const [owner, repo] = String(repository || '').split('/');
     if (!owner || !repo) throw new Error('Repository must use owner/name format.');
+    return { owner, repo };
+  }
+
+  async function inspectRepository(repository, branch) {
+    const { owner, repo } = splitRepository(repository);
     return request('/inspectRepository', { owner, repo, branch });
   }
 
   async function runEngineering(objective, repository, branch) {
-    const [owner, repo] = repository.split('/');
-    if (!owner || !repo) throw new Error('Repository must use owner/name format.');
+    const { owner, repo } = splitRepository(repository);
     return request('/runEngineering', { objective, owner, repo, branch });
   }
 
-  return { initialise, isEnabled, inspectRepository, runEngineering };
+  async function generatePatches(objective, repository, branch) {
+    const { owner, repo } = splitRepository(repository);
+    return request('/generatePatches', { objective, owner, repo, branch });
+  }
+
+  return { initialise, isEnabled, inspectRepository, runEngineering, generatePatches };
 })();
