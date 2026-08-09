@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SADE — Software Engineering Command</title>
+<style>
+:root{--bg:#071019;--panel:#0d1722;--line:#203140;--text:#e8f0f5;--muted:#8fa4b3;--green:#39d98a;--amber:#f5bd4f;--red:#ff6b6b;--blue:#54a9ff}*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#071019,#0b1420);color:var(--text);font:14px Inter,system-ui,Segoe UI,sans-serif}header{height:70px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:#08121c}.brand{font-weight:800;letter-spacing:2px}.brand span{color:var(--green)}.status{color:var(--green);font-size:12px}.layout{display:grid;grid-template-columns:250px 1fr 310px;min-height:calc(100vh - 70px)}aside,section{border-right:1px solid var(--line)}aside{padding:22px}.nav{padding:12px 14px;margin:6px 0;border-radius:8px;color:var(--muted)}.nav.active{background:#122433;color:#fff;border:1px solid #294052}.main{padding:28px;max-width:1100px;width:100%}.eyebrow{color:var(--green);font-size:11px;letter-spacing:2px;text-transform:uppercase}.hero h1{font-size:32px;margin:8px 0}.hero p{color:var(--muted);max-width:760px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:20px}.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stage{padding:14px;border:1px solid var(--line);border-radius:9px;background:#09141e}.stage .num{font-size:11px;color:var(--muted)}.stage b{display:block;margin-top:7px}.stage.active{border-color:var(--green);box-shadow:0 0 0 1px #39d98a22}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:7px}.prompt{width:100%;min-height:130px;background:#08121b;border:1px solid #294052;border-radius:9px;color:#fff;padding:15px;resize:vertical;font:inherit}.actions{display:flex;gap:10px;margin-top:12px}.btn{border:1px solid #315064;background:#132432;color:#fff;padding:11px 16px;border-radius:8px;cursor:pointer}.btn.primary{background:#1d9b63;border-color:#39d98a;color:#04120b;font-weight:700}.right{border-right:0;padding:22px}.metric{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}.metric span{color:var(--muted)}.log{font:12px ui-monospace,SFMono-Regular,monospace;color:#9fb2c0;line-height:1.7}.log strong{color:var(--green)}@media(max-width:950px){.layout{grid-template-columns:1fr}.right,aside{display:none}.pipeline{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<header><div class="brand">S<span>A</span>DE <small>SOFTWARE ENGINEERING COMMAND</small></div><div class="status"><span class="dot"></span>SYSTEM READY</div></header>
+<div class="layout">
+<aside><div class="eyebrow">Workspace</div><div class="nav active">Command Centre</div><div class="nav">Engineering Runs</div><div class="nav">Repositories</div><div class="nav">Audit Log</div><div class="nav">Settings</div></aside>
+<main class="main">
+<div class="hero"><div class="eyebrow">Authenticated Engineering Environment</div><h1>SADE Command Centre</h1><p>Submit an engineering objective and watch SADE process it through the controlled software-engineering pipeline.</p></div>
+<div class="card"><div class="eyebrow">New Engineering Run</div><textarea id="prompt" class="prompt" placeholder="Describe what you want SADE to engineer..."></textarea><div class="actions"><button class="btn primary" id="run">Start Engineering Run</button><button class="btn" id="clear">Clear</button></div></div>
+<div class="card"><div class="eyebrow">Engineering Pipeline</div><div class="pipeline" id="pipeline"></div></div>
+<div class="card"><div class="eyebrow">Activity</div><div class="log" id="log"><strong>READY</strong> — Waiting for an engineering objective.</div></div>
+</main>
+<section class="right"><div class="eyebrow">System State</div><div class="metric"><span>Authentication</span><b id="auth">READY</b></div><div class="metric"><span>Firestore</span><b>READY</b></div><div class="metric"><span>GitHub</span><b>CONNECTED</b></div><div class="metric"><span>Pipeline</span><b id="state">IDLE</b></div><div class="card"><div class="eyebrow">What SADE Does</div><p style="color:#8fa4b3;line-height:1.7">Reconnaissance → Architecture → Planning → Patching → Audit → Validation → Human approval → PR.</p></div></section>
+</div>
+<script>
+const stages=['INTAKE','RECON','ARCHITECTURE','PLAN','IMPLEMENTATION','AUDIT','VALIDATION','PR'];
+const p=document.getElementById('pipeline');
+function draw(active=-1){p.innerHTML=stages.map((s,i)=>`<div class="stage ${i===active?'active':''}"><span class="num">${String(i+1).padStart(2,'0')}</span><b>${s}</b><small style="color:${i<active?'#39d98a':'#8fa4b3'}">${i<active?'COMPLETE':i===active?'RUNNING':'PENDING'}</small></div>`).join('')}
+draw();
+const log=document.getElementById('log');const state=document.getElementById('state');
+document.getElementById('clear').onclick=()=>{document.getElementById('prompt').value='';draw();log.innerHTML='<strong>READY</strong> — Waiting for an engineering objective.';state.textContent='IDLE'};
+document.getElementById('run').onclick=()=>{const text=document.getElementById('prompt').value.trim();if(!text){log.innerHTML='<strong style="color:#ff6b6b">INPUT REQUIRED</strong> — Enter an engineering objective.';return}state.textContent='RUNNING';let i=0;log.innerHTML='<strong>INTAKE</strong> — Engineering objective accepted.';draw(i);const timer=setInterval(()=>{i++;if(i>=stages.length){clearInterval(timer);state.textContent='AWAITING APPROVAL';log.innerHTML='<strong>VALIDATED</strong> — Engineering run is ready for human approval.';draw(6);return}draw(i);log.innerHTML+=`<br><strong>${stages[i]}</strong> — Pipeline stage active.`},450)};
+</script>
+</body>
+</html>
