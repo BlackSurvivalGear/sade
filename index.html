@@ -19,31 +19,38 @@
     <aside class="side">
       <div class="kicker">CONSTITUTION</div>
       <h2>Engineering rules</h2>
-      <p>Every user request is processed through the SADE engineering constitution before the model produces an answer.</p>
+      <p>Every request is processed through the SADE Constitution. In repository mode, Recon receives real GitHub evidence before code is proposed.</p>
       <div class="constitution"><strong>SADE Software Engineering Constitution</strong><span id="constitutionStatus">Loading guidance…</span></div>
-      <div class="notice">No Vercel backend. No GitHub OAuth. No repository credentials. The browser loads SADE's guidance files and sends the user's prompt to the selected AI provider.</div>
+      <div class="notice">Design mode needs only OpenAI. Repository mode uses Firebase Authentication + Cloud Functions + a GitHub App. Secrets never live in the browser.</div>
     </aside>
 
     <main class="main">
       <section class="hero">
         <div class="kicker">ENGINEERING COMMAND CENTRE</div>
-        <h1>Give SADE a prompt.<br><span>Let the pipeline reason.</span></h1>
-        <p>SADE reads its Constitution, existing engineering prompts and specialist workflow, then sends the complete engineering context to GPT and displays the resulting engineering assessment here.</p>
+        <h1>Give SADE a prompt.<br><span>Let the pipeline engineer.</span></h1>
+        <p>SADE can run in design mode or, once the Firebase backend is configured, inspect a real repository and produce repository-specific engineering recommendations and code changes.</p>
 
         <div class="config">
-          <input id="apiKey" class="field" type="password" placeholder="OpenAI API key — kept only for this browser session" autocomplete="off">
+          <input id="apiKey" class="field" type="password" placeholder="OpenAI API key — design mode only" autocomplete="off">
           <input id="model" class="field" type="text" placeholder="Model" autocomplete="off">
           <button id="saveKey" class="button secondary" type="button">Save key</button>
         </div>
 
+        <div class="config">
+          <input id="repository" class="field" type="text" placeholder="Repository — owner/name e.g. BlackSurvivalGear/sade" autocomplete="off">
+          <input id="branch" class="field" type="text" placeholder="Branch" value="main" autocomplete="off">
+          <button id="signIn" class="button secondary" type="button">Sign in</button>
+        </div>
+        <div id="backendState" class="notice">Repository mode: checking backend configuration…</div>
+
         <form id="promptForm" class="composer">
-          <textarea id="prompt" placeholder="Example: Build a secure user authentication module with email login, password reset and role-based access…" required></textarea>
+          <textarea id="prompt" placeholder="Example: Add specialist-agent routing to this repository. Inspect the existing architecture first, then propose the exact code changes and tests." required></textarea>
           <div class="composer-row"><span id="guidanceState">Loading SADE guidance…</span><button class="button" type="submit">Run SADE ↗</button></div>
         </form>
 
         <section class="result">
           <div class="result-head"><strong>SADE ENGINEERING OUTPUT</strong><span id="modelUsed">—</span></div>
-          <div id="result" class="result-body">Enter your API key and an engineering prompt. SADE will process it through the pipeline.</div>
+          <div id="result" class="result-body">Enter an engineering prompt. SADE will process it through the pipeline.</div>
         </section>
       </section>
     </main>
@@ -52,25 +59,21 @@
       <div class="kicker">PIPELINE</div>
       <h2>Specialist workflow</h2>
       <div id="stages"></div>
-      <div class="notice">The demonstration produces a PR-ready proposal. It does not claim to modify, commit, push or merge repository code.</div>
+      <div class="notice">Repository mode gives Recon actual files. Patcher proposes concrete code. Auditor and Validator challenge the proposed result. Nothing is committed or merged automatically.</div>
     </aside>
   </div>
 </div>
+<script src="config/firebase-config.js"></script>
+<script src="js/sade-firebase.js"></script>
+<script src="js/sade-backend.js"></script>
 <script src="js/sade-ai-engine.js"></script>
 <script>
 (async () => {
   const $ = (id) => document.getElementById(id);
-  const apiKey = $('apiKey');
-  const model = $('model');
-  const form = $('promptForm');
-  const prompt = $('prompt');
-  const result = $('result');
-  const stages = $('stages');
-  const status = $('status');
-  const guidanceState = $('guidanceState');
-  const constitutionStatus = $('constitutionStatus');
-  const modelUsed = $('modelUsed');
-  const saveKey = $('saveKey');
+  const apiKey = $('apiKey'), model = $('model'), form = $('promptForm'), prompt = $('prompt');
+  const result = $('result'), stages = $('stages'), status = $('status'), guidanceState = $('guidanceState');
+  const constitutionStatus = $('constitutionStatus'), modelUsed = $('modelUsed'), saveKey = $('saveKey');
+  const repository = $('repository'), branch = $('branch'), signIn = $('signIn'), backendState = $('backendState');
 
   model.value = SADE_AI.getModel();
   if (SADE_AI.getApiKey()) apiKey.value = '••••••••••••••••';
@@ -82,55 +85,50 @@
     stages.innerHTML = state.pipeline.stages.map((stage, index) => `<div class="stage" data-stage="${index}"><div class="name">${index + 1}. ${stage.name}</div><div class="role">${stage.role}</div></div>`).join('');
     status.textContent = 'READY — GUIDANCE LOADED';
   } catch (error) {
-    constitutionStatus.textContent = 'Guidance load failed';
-    guidanceState.textContent = error.message;
-    guidanceState.className = 'error';
-    status.textContent = 'GUIDANCE ERROR';
+    constitutionStatus.textContent = 'Guidance load failed'; guidanceState.textContent = error.message; guidanceState.className = 'error'; status.textContent = 'GUIDANCE ERROR';
   }
+
+  await SADE_BACKEND.initialise();
+  backendState.textContent = SADE_BACKEND.isEnabled() ? 'Repository mode: backend configured. Sign in to inspect a live repository.' : 'Repository mode: not configured yet. Design mode remains available.';
 
   saveKey.addEventListener('click', () => {
     const value = apiKey.value.trim();
     if (value && !value.startsWith('••')) SADE_AI.setApiKey(value);
     if (model.value.trim()) SADE_AI.setModel(model.value.trim());
-    apiKey.value = '••••••••••••••••';
-    status.textContent = 'KEY READY — SESSION ONLY';
+    apiKey.value = '••••••••••••••••'; status.textContent = 'KEY READY — SESSION ONLY';
+  });
+
+  signIn.addEventListener('click', async () => {
+    try { await SADE_FIREBASE.signIn(); backendState.textContent = 'Repository mode: signed in. Live repository inspection is available.'; status.textContent = 'FIREBASE AUTHENTICATED'; }
+    catch (error) { backendState.textContent = error.message; status.textContent = 'AUTH CONFIGURATION REQUIRED'; }
   });
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (apiKey.value.trim() && !apiKey.value.startsWith('••')) SADE_AI.setApiKey(apiKey.value.trim());
     if (model.value.trim()) SADE_AI.setModel(model.value.trim());
-    const text = prompt.value.trim();
-    if (!text) return;
-
+    const text = prompt.value.trim(); if (!text) return;
     result.className = 'result-body';
-    result.textContent = 'SADE is processing the objective through Intake → Recon → Architecture → Plan → Implementation → Audit → Validation → PR Preparation…';
-    modelUsed.textContent = SADE_AI.getModel();
-    status.textContent = 'PIPELINE RUNNING';
+    result.textContent = 'SADE is processing Intake → Recon → Architecture → Plan → Implementation → Audit → Validation → PR Preparation…';
+    modelUsed.textContent = SADE_AI.getModel(); status.textContent = 'PIPELINE RUNNING';
     stages.querySelectorAll('.stage').forEach((stage) => stage.classList.remove('active','done'));
-
     let index = 0;
-    const timer = setInterval(() => {
-      const all = [...stages.querySelectorAll('.stage')];
-      all.forEach((stage, i) => stage.classList.toggle('done', i < index));
-      if (all[index]) all[index].classList.add('active');
-      index += 1;
-      if (index >= all.length) clearInterval(timer);
-    }, 450);
-
+    const timer = setInterval(() => { const all = [...stages.querySelectorAll('.stage')]; all.forEach((stage, i) => stage.classList.toggle('done', i < index)); if (all[index]) all[index].classList.add('active'); index += 1; if (index >= all.length) clearInterval(timer); }, 450);
     try {
-      const response = await SADE_AI.run(text);
-      clearInterval(timer);
-      stages.querySelectorAll('.stage').forEach((stage) => { stage.classList.remove('active'); stage.classList.add('done'); });
-      result.textContent = response.text;
-      modelUsed.textContent = response.model;
-      status.textContent = 'PIPELINE COMPLETE';
+      let response;
+      const repoMode = SADE_BACKEND.isEnabled() && repository.value.trim() && branch.value.trim() && SADE_FIREBASE.isReady();
+      if (repoMode) {
+        response = await SADE_BACKEND.runEngineering(text, repository.value.trim(), branch.value.trim());
+        result.textContent = `REPOSITORY EVIDENCE\n${response.evidence.filesInspected.length} files inspected on ${response.branch}.\n\n${response.output}`;
+        modelUsed.textContent = 'SADE BACKEND · GPT-5.4';
+      } else {
+        response = await SADE_AI.run(text);
+        result.textContent = response.text;
+        modelUsed.textContent = response.model;
+      }
+      clearInterval(timer); stages.querySelectorAll('.stage').forEach((stage) => { stage.classList.remove('active'); stage.classList.add('done'); }); status.textContent = repoMode ? 'REPOSITORY PIPELINE COMPLETE' : 'PIPELINE COMPLETE';
     } catch (error) {
-      clearInterval(timer);
-      stages.querySelectorAll('.stage').forEach((stage) => stage.classList.remove('active'));
-      result.className = 'result-body error';
-      result.textContent = error.message;
-      status.textContent = 'PIPELINE ERROR';
+      clearInterval(timer); stages.querySelectorAll('.stage').forEach((stage) => stage.classList.remove('active')); result.className = 'result-body error'; result.textContent = error.message; status.textContent = 'PIPELINE ERROR';
     }
   });
 })();
