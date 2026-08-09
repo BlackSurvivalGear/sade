@@ -53,9 +53,12 @@ Configure these as server-side environment variables on the deployment platform:
 GITHUB_APP_CLIENT_ID=<GitHub App Client ID>
 GITHUB_APP_CLIENT_SECRET=<GitHub App Client Secret>
 SADE_ALLOWED_ORIGIN=https://<your-production-sade-domain>
+SADE_CALLBACK_URL=https://<your-production-sade-domain>/
 ```
 
 `GITHUB_APP_CLIENT_SECRET` must never be committed to Git.
+
+`SADE_ALLOWED_ORIGIN` controls which browser origin may call the auth endpoint. `SADE_CALLBACK_URL` must exactly match the GitHub App Callback URL and the redirect URI sent by the browser.
 
 ### Vercel deployment
 
@@ -65,10 +68,11 @@ After deployment:
 
 1. Copy the production Vercel URL.
 2. Set `SADE_ALLOWED_ORIGIN` to that exact origin, without a trailing slash.
-3. Set `GITHUB_APP_CLIENT_ID` to the GitHub App Client ID.
-4. Generate a GitHub App client secret and store it only as `GITHUB_APP_CLIENT_SECRET` in Vercel.
-5. In the GitHub App settings, set the Callback URL to the exact SADE production URL, for example `https://your-sade-domain.vercel.app/`.
-6. Redeploy after adding the environment variables.
+3. Set `SADE_CALLBACK_URL` to the exact callback URL, normally the Vercel URL plus `/`.
+4. Set `GITHUB_APP_CLIENT_ID` to the GitHub App Client ID.
+5. Generate a GitHub App client secret and store it only as `GITHUB_APP_CLIENT_SECRET` in Vercel.
+6. In the GitHub App settings, set the Callback URL to the exact value of `SADE_CALLBACK_URL`.
+7. Redeploy after adding the environment variables.
 
 If SADE is served from a different frontend origin, change `config/github-app.js` so `authApiUrl` points to the deployed API endpoint, for example `https://your-auth-domain.vercel.app/api/github/token`.
 
