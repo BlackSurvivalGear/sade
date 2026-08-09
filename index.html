@@ -78,7 +78,7 @@
     <section class="auth-card">
       <div class="auth-kicker">Secure browser connection</div>
       <h2 id="authTitle">Connect SADE to GitHub</h2>
-      <p>SADE uses GitHub App web authorisation with PKCE. No GitHub secret or private key is stored in the browser. The resulting user token is kept only in this browser session.</p>
+      <p>SADE uses GitHub App web authorisation with PKCE. The GitHub App secret stays on the secure server and is never exposed to the browser. Your resulting user token is kept only in this browser session.</p>
       <div class="auth-field"><label for="authClientId">GitHub App Client ID</label><input id="authClientId" type="text" autocomplete="off" placeholder="Iv1.…"></div>
       <div id="deviceCode" class="device-code" aria-live="polite"></div>
       <div id="authStatus" class="auth-status">Ready to connect to GitHub.</div>
