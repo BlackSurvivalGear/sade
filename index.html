@@ -7,25 +7,61 @@
   <meta name="description" content="SADE AI — African AI Software Engineering Agent">
   <link rel="icon" type="image/png" href="assets/brand/favi.png">
   <link rel="stylesheet" href="css/styles.css">
-  <title>SADE AI — African AI Software Engineering Agent</title>
+  <title>SADE AI — Repository Home</title>
 </head>
 <body>
   <div class="ambient ambient-one"></div>
   <div class="ambient ambient-two"></div>
 
-  <main id="landing" class="landing">
-    <div class="hero-card">
-      <div class="hero-logo-wrap">
-        <img class="hero-logo" src="assets/brand/sadelogo.png" alt="SADE AI — African AI Software Engineering Agent">
+  <main id="repositoryHome" class="repo-home">
+    <header class="home-topbar">
+      <a class="brand" href="#" aria-label="SADE AI home">
+        <img src="assets/brand/favi.png" alt="SADE AI">
+        <span><strong>SADE AI</strong><small>Software Engineering Agent</small></span>
+      </a>
+      <div class="home-actions">
+        <span class="connection-pill" id="connectionPill"><span class="status-dot muted"></span> GITHUB NOT CONNECTED</span>
+        <button id="connectGithub" class="ghost-button" type="button">Connect GitHub</button>
       </div>
-      <div class="hero-copy">
-        <div class="eyebrow">AFRICAN AI SOFTWARE ENGINEERING AGENT</div>
-        <h1>Build with <span>SADE AI.</span></h1>
-        <p>Inspect. Understand. Plan. Code. Test. Audit. Fix. Validate. PR.</p>
-        <button id="launchButton" class="launch-button" type="button"><span>Launch SADE</span><span class="arrow">→</span></button>
-        <div class="hero-status"><span class="status-dot"></span> Engineering environment ready</div>
+    </header>
+
+    <section class="repo-home-content">
+      <div class="home-heading">
+        <div class="eyebrow">ENGINEERING COMMAND CENTRE</div>
+        <h1>Select a <span>repository.</span></h1>
+        <p>Choose the GitHub repository you want SADE to work on. Each engineering session is tied to a repository and branch.</p>
       </div>
-    </div>
+
+      <section class="repo-selector" aria-labelledby="repoSelectorTitle">
+        <div class="selector-header">
+          <div>
+            <div id="repoSelectorTitle" class="selector-title">Repositories</div>
+            <div class="selector-subtitle" id="repoSubtitle">Connect GitHub to load your repositories.</div>
+          </div>
+          <div class="account-chip" id="accountChip" hidden>BlackSurvivalGear</div>
+        </div>
+
+        <label class="repo-search" for="repoSearch">
+          <span aria-hidden="true">⌕</span>
+          <input id="repoSearch" type="search" placeholder="Search repositories..." autocomplete="off" disabled>
+        </label>
+
+        <div id="repoList" class="repo-list" aria-live="polite">
+          <div class="connection-empty">
+            <div class="empty-icon">GH</div>
+            <strong>Connect GitHub to begin</strong>
+            <p>SADE will use authorised GitHub access to discover repositories, branches and engineering sessions.</p>
+            <button id="connectGithubSecondary" class="launch-button" type="button">Connect GitHub <span class="arrow">→</span></button>
+          </div>
+        </div>
+      </section>
+
+      <div class="home-note">
+        <span class="status-dot"></span>
+        <span>SADE will never modify a repository until an engineering session is started.</span>
+      </div>
+    </section>
+
     <footer class="landing-footer">SADE AI · Intelligent · Reliable · Disciplined · Always Learning</footer>
   </main>
 
@@ -35,9 +71,11 @@
         <img src="assets/brand/favi.png" alt="SADE AI">
         <div><strong>SADE AI</strong><small>Software Engineering Agent</small></div>
       </div>
+      <div class="workspace-repo" id="workspaceRepo">Select a repository</div>
       <div class="topbar-actions">
-        <span class="live-pill"><span class="status-dot"></span> ONLINE</span>
+        <span class="live-pill"><span class="status-dot"></span> GITHUB · CONNECTED</span>
         <button id="newSessionButton" class="ghost-button" type="button">+ New session</button>
+        <button id="backHomeButton" class="ghost-button" type="button">Repositories</button>
       </div>
     </header>
 
@@ -49,13 +87,13 @@
 
       <section class="chat-panel">
         <div class="chat-header">
-          <div><div class="chat-title">New engineering session</div><div class="chat-subtitle">Repository-aware development workspace</div></div>
-          <div class="repo-chip">GITHUB · READY</div>
+          <div><div class="chat-title">New engineering session</div><div class="chat-subtitle" id="chatSubtitle">Repository-aware development workspace</div></div>
+          <div class="repo-chip" id="repoChip">GITHUB · CONNECTED</div>
         </div>
         <div id="chatMessages" class="chat-messages" aria-live="polite">
           <div class="welcome-message">
             <img src="assets/brand/favi.png" alt="">
-            <div><strong>Hello, Commander.</strong><p>I’m SADE. Tell me what you want built, fixed, audited or deployed. I’ll follow the engineering workflow before preparing a review-ready PR.</p></div>
+            <div><strong>Hello, Commander.</strong><p>I’m SADE. I’ll inspect the selected repository before making changes and follow the complete engineering workflow.</p></div>
           </div>
         </div>
         <form id="chatForm" class="composer">
