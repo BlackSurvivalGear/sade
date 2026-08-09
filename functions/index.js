@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const { generatePatches } = require('./patcher');
 const { auditPatches } = require('./auditor');
 const { validatePatches } = require('./validator');
+const { writeApprovedProposal } = require('./writer');
 
 admin.initializeApp();
 
@@ -36,7 +37,9 @@ const constitution = `SADE SOFTWARE ENGINEERING CONSTITUTION
 7. Audit proposed results for regressions, security, correctness and maintainability.
 8. Never claim code was changed, tested, committed, pushed or merged unless that action actually occurred.
 9. When repository evidence is unavailable, say evidence required rather than inventing facts.
-10. The user remains the authority for implementation approval and merge approval.`;
+10. The user remains the authority for implementation approval and merge approval.
+11. Controlled writes require explicit human approval and a fresh repository-state check.
+12. SADE never writes directly to the protected/default branch.`;
 
 function cors(res) {
   res.set('Access-Control-Allow-Origin', '*');
@@ -71,12 +74,13 @@ async function githubRequest(path, token, options = {}) {
   return data;
 }
 
-async function installationToken(owner, repo) {
+async function installationToken(owner, repo, write = false) {
   const config = githubAppConfig.value();
   if (!config?.appId || !config?.privateKey) throw new Error('SADE_GITHUB_APP is not configured.');
   const jwt = appJwt(config);
   const installation = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`, jwt);
-  const token = await githubRequest(`/app/installations/${installation.id}/access_tokens`, jwt, { method: 'POST' });
+  const permissions = write ? { contents: 'write' } : { contents: 'read' };
+  const token = await githubRequest(`/app/installations/${installation.id}/access_tokens`, jwt, { method: 'POST', body: JSON.stringify({ repositories: [repo], permissions }) });
   return token.token;
 }
 
@@ -87,7 +91,7 @@ function selectRelevantFiles(tree) {
 }
 
 async function inspectRepository(owner, repo, branch) {
-  const token = await installationToken(owner, repo);
+  const token = await installationToken(owner, repo, false);
   const repository = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`, token);
   const tree = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`, token);
   const selected = selectRelevantFiles(tree);
@@ -96,8 +100,8 @@ async function inspectRepository(owner, repo, branch) {
     try {
       const blob = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/blobs/${item.sha}`, token);
       const content = blob.encoding === 'base64' ? Buffer.from(blob.content.replace(/\n/g, ''), 'base64').toString('utf8') : String(blob.content || '');
-      files.push({ path: item.path, size: item.size || content.length, content });
-    } catch (error) { files.push({ path: item.path, size: item.size || 0, error: error.message }); }
+      files.push({ path: item.path, size: item.size || content.length, sha: item.sha, content });
+    } catch (error) { files.push({ path: item.path, size: item.size || 0, sha: item.sha, error: error.message }); }
   }
   return { repository: { fullName: repository.full_name, defaultBranch: repository.default_branch, private: repository.private, language: repository.language }, branch, treeCount: tree.tree?.length || 0, truncated: Boolean(tree.truncated), files };
 }
@@ -137,15 +141,8 @@ exports.inspectRepository = onRequest({ region: 'europe-west2', secrets: [github
 
 exports.runEngineering = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
   cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
-  try {
-    const user = await requireUser(req);
-    const { objective, owner, repo, branch } = req.body || {};
-    if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' });
-    const context = await inspectRepository(owner, repo, branch);
-    const output = await runOpenAI(objective, context);
-    const proposal = await buildAuditedProposal(objective, context);
-    return send(res, 200, { user: user.uid, repository: context.repository, branch, output, ...proposal, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } });
-  } catch (error) { console.error('runEngineering', error); return send(res, error.status || 500, { error: error.message }); }
+  try { const user = await requireUser(req); const { objective, owner, repo, branch } = req.body || {}; if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' }); const context = await inspectRepository(owner, repo, branch); const output = await runOpenAI(objective, context); const proposal = await buildAuditedProposal(objective, context); return send(res, 200, { user: user.uid, repository: context.repository, branch, output, ...proposal, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } }); }
+  catch (error) { console.error('runEngineering', error); return send(res, error.status || 500, { error: error.message }); }
 });
 
 exports.generatePatches = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
@@ -158,4 +155,20 @@ exports.auditAndValidate = onRequest({ region: 'europe-west2', secrets: [githubA
   cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
   try { await requireUser(req); const { objective, owner, repo, branch } = req.body || {}; if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' }); const context = await inspectRepository(owner, repo, branch); const proposal = await buildAuditedProposal(objective, context); return send(res, 200, { repository: context.repository, branch, ...proposal, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } }); }
   catch (error) { console.error('auditAndValidate', error); return send(res, error.status || 500, { error: error.message }); }
+});
+
+exports.applyApprovedPatches = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
+  cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
+  try {
+    const user = await requireUser(req);
+    const { objective, owner, repo, branch, approval, patches, validation } = req.body || {};
+    if (!objective || !owner || !repo || !branch || approval !== true || !patches || !validation) return send(res, 400, { error: 'Explicit human approval, objective, repository, branch, patches and validation are required.' });
+    if (validation.verdict !== 'READY' || validation.writeAllowed !== false) return send(res, 409, { error: 'Controlled write blocked: Validator must be READY and writeAllowed must remain false until this explicit human approval.' });
+    const context = await inspectRepository(owner, repo, branch);
+    const fresh = await buildAuditedProposal(objective, context);
+    if (JSON.stringify(fresh.patches) !== JSON.stringify(patches) || JSON.stringify(fresh.validation) !== JSON.stringify(validation)) return send(res, 409, { error: 'Controlled write blocked: proposal changed or is stale. Regenerate and approve the fresh proposal.' });
+    const token = await installationToken(owner, repo, true);
+    const result = await writeApprovedProposal({ githubRequest, installationToken: token, owner, repo, baseBranch: branch, objective, patches: fresh.patches, validation: fresh.validation });
+    return send(res, 200, { user: user.uid, status: 'WRITTEN_TO_FEATURE_BRANCH', ...result, baseBranch: branch, mergeAllowed: false });
+  } catch (error) { console.error('applyApprovedPatches', error); return send(res, error.status || 500, { error: error.message }); }
 });
