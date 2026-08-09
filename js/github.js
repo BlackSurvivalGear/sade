@@ -1,9 +1,8 @@
 const GITHUB_API = 'https://api.github.com';
-const GITHUB_OAUTH = 'https://github.com';
 const API_VERSION = '2022-11-28';
 const TOKEN_KEY = 'sade.github.auth.v1';
 const CLIENT_KEY = 'sade.github.client-id';
-const PKCE_KEY = 'sade.github.pkce.v1';
+const PKCE_KEY = 'sade.github.pkce.v2';
 
 function configuredClientId() {
   const configured = window.SADE_GITHUB_APP?.clientId;
@@ -13,6 +12,14 @@ function configuredClientId() {
 
 function saveClientId(clientId) {
   localStorage.setItem(CLIENT_KEY, clientId.trim());
+}
+
+function authServiceUrl() {
+  const configured = window.SADE_GITHUB_APP?.authServiceUrl;
+  if (!configured || configured.includes('REPLACE_')) {
+    throw new Error('SADE GitHub authentication service is not configured yet.');
+  }
+  return configured.replace(/\/$/, '');
 }
 
 function readAuth() {
@@ -26,10 +33,6 @@ function writeAuth(auth) {
 
 function clearAuth() {
   sessionStorage.removeItem(TOKEN_KEY);
-}
-
-function redirectUri() {
-  return `${window.location.origin}${window.location.pathname}`;
 }
 
 function randomString(length = 64) {
@@ -50,55 +53,6 @@ async function sha256Base64Url(value) {
   return base64Url(new Uint8Array(digest));
 }
 
-async function beginWebAuth() {
-  const clientId = configuredClientId();
-  if (!clientId) throw new Error('SADE needs the GitHub App Client ID before it can connect.');
-
-  const state = randomString(32);
-  const codeVerifier = randomString(64);
-  const codeChallenge = await sha256Base64Url(codeVerifier);
-
-  sessionStorage.setItem(PKCE_KEY, JSON.stringify({
-    state,
-    codeVerifier,
-    redirectUri: redirectUri(),
-    createdAt: Date.now()
-  }));
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri(),
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256'
-  });
-
-  window.location.assign(`${GITHUB_OAUTH}/login/oauth/authorize?${params.toString()}`);
-}
-
-async function exchangeAuthorizationCode(code, verifier, callbackUri) {
-  const clientId = configuredClientId();
-  const response = await fetch(`${GITHUB_OAUTH}/login/oauth/access_token`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-    },
-    body: new URLSearchParams({
-      client_id: clientId,
-      code,
-      redirect_uri: callbackUri,
-      code_verifier: verifier
-    })
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok || data.error || !data.access_token) {
-    throw new Error(data.error_description || data.error || `GitHub OAuth error ${response.status}`);
-  }
-  return data;
-}
-
 function normaliseToken(token) {
   return {
     accessToken: token.access_token,
@@ -108,39 +62,91 @@ function normaliseToken(token) {
   };
 }
 
+function beginWebAuth() {
+  const state = randomString(32);
+  const codeVerifier = randomString(64);
+  const service = authServiceUrl();
+  const serviceOrigin = new URL(service).origin;
+
+  sessionStorage.setItem(PKCE_KEY, JSON.stringify({
+    state,
+    codeVerifier,
+    createdAt: Date.now()
+  }));
+
+  const url = new URL(`${service}/api/github/start`);
+  url.searchParams.set('state', state);
+  url.searchParams.set('code_verifier', codeVerifier);
+  url.searchParams.set('origin', window.location.origin);
+
+  return new Promise((resolve, reject) => {
+    const popup = window.open(url.toString(), 'sade-github-auth', 'width=560,height=760,menubar=no,toolbar=no,location=yes,status=no,resizable=yes');
+    if (!popup) {
+      window.location.assign(url.toString());
+      reject(new Error('Your browser blocked the GitHub authentication window.')); 
+      return;
+    }
+
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMessage);
+      window.clearInterval(watchPopup);
+      callback(value);
+    };
+
+    const onMessage = async (event) => {
+      if (event.origin !== serviceOrigin || event.source !== popup || event.data?.source !== 'sade-github-auth') return;
+      const stored = JSON.parse(sessionStorage.getItem(PKCE_KEY) || 'null');
+      sessionStorage.removeItem(PKCE_KEY);
+      if (!stored?.state || stored.state !== event.data.state) {
+        finish(reject, new Error('GitHub authorisation state validation failed. Please reconnect.'));
+        return;
+      }
+      if (Date.now() - Number(stored.createdAt || 0) > 15 * 60 * 1000) {
+        finish(reject, new Error('The GitHub authorisation request expired. Please reconnect.'));
+        return;
+      }
+      if (event.data.error) {
+        finish(reject, new Error(event.data.error));
+        return;
+      }
+      if (!event.data.token?.accessToken) {
+        finish(reject, new Error('GitHub authentication completed without an access token.'));
+        return;
+      }
+      writeAuth(event.data.token);
+      try {
+        const user = await getCurrentUser();
+        finish(resolve, user);
+      } catch (error) {
+        clearAuth();
+        finish(reject, error);
+      }
+    };
+
+    const watchPopup = window.setInterval(() => {
+      if (popup.closed && !settled) {
+        const stored = sessionStorage.getItem(PKCE_KEY);
+        if (stored) sessionStorage.removeItem(PKCE_KEY);
+        finish(reject, new Error('GitHub authentication was cancelled.'));
+      }
+    }, 500);
+
+    window.addEventListener('message', onMessage);
+  });
+}
+
 async function handleOAuthCallback() {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
-  const returnedState = params.get('state');
-  const oauthError = params.get('error');
-
-  if (!code && !oauthError) return null;
-
-  const stored = JSON.parse(sessionStorage.getItem(PKCE_KEY) || 'null');
-  sessionStorage.removeItem(PKCE_KEY);
-
-  if (oauthError) {
-    throw new Error(params.get('error_description') || `GitHub authorisation failed: ${oauthError}`);
-  }
-  if (!stored?.state || stored.state !== returnedState) {
-    throw new Error('GitHub authorisation state validation failed. Please start the connection again.');
-  }
-  if (Date.now() - Number(stored.createdAt || 0) > 15 * 60 * 1000) {
-    throw new Error('The GitHub authorisation request expired. Please start again.');
-  }
-
-  const token = await exchangeAuthorizationCode(code, stored.codeVerifier, stored.redirectUri);
-  writeAuth(normaliseToken(token));
-
-  const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-  window.history.replaceState({}, document.title, cleanUrl);
-
-  return getCurrentUser();
+  // Authentication is completed by the dedicated auth service callback popup.
+  // This remains as a compatibility no-op for existing SADE boot code.
+  return null;
 }
 
 async function refreshAccessToken() {
-  // The browser-only PKCE flow intentionally does not expose the App client secret.
-  // When the short-lived user token expires, reconnect through GitHub.
+  // The auth broker can be extended to refresh expiring tokens later. For now,
+  // reconnect before the short-lived GitHub user token expires.
   clearAuth();
   return null;
 }
