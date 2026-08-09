@@ -25,8 +25,8 @@ export default {
     const description = url.searchParams.get('error_description');
     const codeVerifier = cookieValue(request, 'sade_pkce_verifier');
 
-    if (error) return html({ error: description || error }, 400);
-    if (!code || !state || !codeVerifier) return html({ error: 'GitHub returned an incomplete authorization response. Please reconnect.' }, 400);
+    if (error) return html({ error: description || error, state }, 400);
+    if (!code || !state || !codeVerifier) return html({ error: 'GitHub returned an incomplete authorization response. Please reconnect.', state }, 400);
 
     const redirectUri = `${url.origin}${url.pathname}`;
     const response = await fetch('https://github.com/login/oauth/access_token', {
@@ -42,7 +42,7 @@ export default {
     });
 
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.error || !data.access_token) return html({ error: data.error_description || data.error || `GitHub token exchange failed (${response.status}).` }, 502);
+    if (!response.ok || data.error || !data.access_token) return html({ error: data.error_description || data.error || `GitHub token exchange failed (${response.status}).`, state }, 502);
 
     return html({
       ok: true,
