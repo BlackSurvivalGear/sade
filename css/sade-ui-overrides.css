@@ -1,0 +1,42 @@
+/* SADE UI refinement: hero restoration and calmer typography. */
+.repo-home::before {
+  background:
+    linear-gradient(90deg, rgba(3,4,4,.97) 0%, rgba(3,4,4,.78) 52%, rgba(3,4,4,.58) 100%),
+    url("../assets/brand/sadelogo.png") 82% 48% / min(760px, 58vw) auto no-repeat;
+  opacity: .27;
+  filter: saturate(.9) contrast(1.04);
+}
+
+.home-heading {
+  max-width: 610px;
+}
+
+.home-heading h1 {
+  font-size: clamp(36px, 4.7vw, 54px);
+  line-height: 1.02;
+  letter-spacing: -.045em;
+  margin-bottom: 14px;
+}
+
+.home-heading p {
+  font-size: 14px;
+  line-height: 1.65;
+  max-width: 560px;
+}
+
+@media (max-width: 760px) {
+  .repo-home::before {
+    background:
+      linear-gradient(180deg, rgba(3,4,4,.96) 0%, rgba(3,4,4,.88) 58%, rgba(3,4,4,.72) 100%),
+      url("../assets/brand/sadelogo.png") center 30% / 520px auto no-repeat;
+    opacity: .2;
+  }
+
+  .repo-home-content {
+    padding-top: 52px;
+  }
+
+  .home-heading h1 {
+    font-size: clamp(34px, 10vw, 46px);
+  }
+}
