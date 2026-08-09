@@ -47,8 +47,11 @@ async function listSessions(uid, limit = 50) {
 }
 
 async function updateSession({ uid, sessionId, patch }) {
-  const allowed = ['status', 'currentStage', 'repository', 'branch', 'objective', 'pipeline', 'artifacts', 'audit', 'validation', 'pr', 'lastError'];
+  // Client-facing session edits are limited to user-owned request metadata.
+  // Pipeline state, audit, validation and PR state are server-controlled.
+  const allowed = ['repository', 'branch', 'objective'];
   const update = Object.fromEntries(Object.entries(patch || {}).filter(([key]) => allowed.includes(key)).map(([key, value]) => [key, clean(value)]));
+  if (Object.keys(update).length === 0) throw new Error('No client-editable session fields were supplied.');
   update.updatedAt = admin.firestore.FieldValue.serverTimestamp();
   await sessionRef(uid, sessionId).update(update);
   return getSession({ uid, sessionId });
