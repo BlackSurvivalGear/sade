@@ -1,13 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Client applications may read their own profile document, but profile
+    // mutations are controlled by the authenticated backend.
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
 
+      // Sessions are created and mutated through the SADE HTTPS API.
+      // Clients may read only their own sessions.
       match /sessions/{sessionId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if false;
+
+        // Session messages are also backend-controlled. This prevents a
+        // client from injecting or rewriting pipeline history directly.
         match /messages/{messageId} {
-          allow read, write: if request.auth != null && request.auth.uid == userId;
+          allow read: if request.auth != null && request.auth.uid == userId;
+          allow write: if false;
         }
       }
     }
