@@ -2,6 +2,7 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { defineJsonSecret, defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('node:crypto');
+const { generatePatches } = require('./patcher');
 
 admin.initializeApp();
 
@@ -127,6 +128,25 @@ exports.inspectRepository = onRequest({ region: 'europe-west2', secrets: [github
 
 exports.runEngineering = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
   cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
-  try { const user = await requireUser(req); const { objective, owner, repo, branch } = req.body || {}; if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' }); const context = await inspectRepository(owner, repo, branch); const output = await runOpenAI(objective, context); return send(res, 200, { user: user.uid, repository: context.repository, branch, output, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } }); }
-  catch (error) { console.error('runEngineering', error); return send(res, error.status || 500, { error: error.message }); }
+  try {
+    const user = await requireUser(req);
+    const { objective, owner, repo, branch } = req.body || {};
+    if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' });
+    const context = await inspectRepository(owner, repo, branch);
+    const output = await runOpenAI(objective, context);
+    const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() });
+    return send(res, 200, { user: user.uid, repository: context.repository, branch, output, patches, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } });
+  } catch (error) { console.error('runEngineering', error); return send(res, error.status || 500, { error: error.message }); }
+});
+
+exports.generatePatches = onRequest({ region: 'europe-west2', secrets: [githubAppConfig, openaiApiKey], timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
+  cors(res); if (req.method === 'OPTIONS') return res.status(204).send(''); if (req.method !== 'POST') return send(res, 405, { error: 'POST required.' });
+  try {
+    await requireUser(req);
+    const { objective, owner, repo, branch } = req.body || {};
+    if (!objective || !owner || !repo || !branch) return send(res, 400, { error: 'objective, owner, repo and branch are required.' });
+    const context = await inspectRepository(owner, repo, branch);
+    const patches = await generatePatches({ objective, context, apiKey: openaiApiKey.value() });
+    return send(res, 200, { repository: context.repository, branch, patches, evidence: { filesInspected: context.files.map(file => file.path), treeCount: context.treeCount, truncated: context.truncated } });
+  } catch (error) { console.error('generatePatches', error); return send(res, error.status || 500, { error: error.message }); }
 });
