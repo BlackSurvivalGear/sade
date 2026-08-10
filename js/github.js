@@ -3,12 +3,69 @@ const GITHUB_OAUTH='https://github.com';
 const API_VERSION='2022-11-28';
 const TOKEN_KEY='sade.github.auth.v1';
 const CLIENT_KEY='sade.github.client-id';
+
 function configuredClientId(){const configured=window.SADE_GITHUB_APP?.clientId;if(configured&&!configured.startsWith('REPLACE_'))return configured;return localStorage.getItem(CLIENT_KEY)||'';}
 function saveClientId(clientId){localStorage.setItem(CLIENT_KEY,clientId.trim());}
 function readAuth(){try{return JSON.parse(sessionStorage.getItem(TOKEN_KEY)||'null');}catch{return null;}}
 function writeAuth(auth){sessionStorage.setItem(TOKEN_KEY,JSON.stringify(auth));}
 function clearAuth(){sessionStorage.removeItem(TOKEN_KEY);}
-async function oauthJson(path,params){const response=await fetch(`${GITHUB_OAUTH}${path}`,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(params)});const data=await response.json();if(!response.ok)throw new Error(data.error_description||data.error||`GitHub OAuth error ${response.status}`);return data;}
+
+async function oauthJson(path, params) {
+  const targetUrl = `${GITHUB_OAUTH}${path}`;
+
+  // Resilient fallback chain of public CORS proxies
+  const proxies = [
+    url => `https://corsproxy.io/?${url}`,
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://cors-anywhere.herokuapp.com/${url}`
+  ];
+
+  let lastError = null;
+  for (const getProxiedUrl of proxies) {
+    try {
+      const response = await fetch(getProxiedUrl(targetUrl), {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: new URLSearchParams(params)
+      });
+      if (!response.ok) {
+        throw new Error(`Proxy returned status ${response.status}`);
+      }
+      const data = await response.json();
+      if (data.error) {
+        // Return known protocol states immediately so polling logic can process them
+        if (data.error === 'authorization_pending' || data.error === 'slow_down') {
+          return data;
+        }
+        throw new Error(data.error_description || data.error);
+      }
+      return data;
+    } catch (err) {
+      lastError = err;
+      console.warn(`CORS proxy fallback triggered for ${targetUrl}:`, err);
+    }
+  }
+
+  // Final direct fallback request
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: new URLSearchParams(params)
+    });
+    if (!response.ok) throw new Error(`Direct connection status ${response.status}`);
+    return await response.json();
+  } catch (directErr) {
+    throw new Error(`GitHub authentication failed. All CORS proxies failed and direct connection was blocked by CORS. Details: ${lastError?.message || directErr.message}`);
+  }
+}
+
 async function requestDeviceCode(clientId){return oauthJson('/login/device/code',{client_id:clientId});}
 async function pollDeviceToken(clientId,deviceCode,interval,onPending){let delay=Math.max(Number(interval)||5,5)*1000;const deadline=Date.now()+15*60*1000;while(Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,delay));const data=await oauthJson('/login/oauth/access_token',{client_id:clientId,device_code:deviceCode,grant_type:'urn:ietf:params:oauth:grant-type:device_code'});if(data.access_token)return data;if(data.error==='authorization_pending'){onPending?.('Waiting for GitHub authorisation…');continue;}if(data.error==='slow_down'){delay+=5000;onPending?.('GitHub asked SADE to slow down. Still waiting…');continue;}if(data.error==='expired_token')throw new Error('The GitHub verification code expired. Start again.');if(data.error==='access_denied')throw new Error('GitHub authorisation was cancelled.');throw new Error(data.error_description||data.error||'GitHub authorisation failed.');}throw new Error('The GitHub authorisation window expired. Start again.');}
 function normaliseToken(token){return{accessToken:token.access_token,refreshToken:token.refresh_token||null,expiresAt:token.expires_in?Date.now()+Number(token.expires_in)*1000:null,refreshExpiresAt:token.refresh_token_expires_in?Date.now()+Number(token.refresh_token_expires_in)*1000:null};}
