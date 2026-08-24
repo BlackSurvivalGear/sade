@@ -1,5 +1,5 @@
 const { onRequest } = require('firebase-functions/v2/https');
-const { defineJsonSecret, defineSecret } = require('firebase-functions/params');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
 const crypto = require('node:crypto');
 const { generatePatches } = require('./patcher');
@@ -11,7 +11,7 @@ const sessionApi = require('./session-api');
 
 admin.initializeApp();
 
-const githubAppConfig = defineJsonSecret('SADE_GITHUB_APP');
+const githubAppConfig = defineSecret('SADE_GITHUB_APP');
 const openaiApiKey = defineSecret('SADE_OPENAI_API_KEY');
 const API_VERSION = '2026-03-10';
 const MAX_FILE_BYTES = 100 * 1024;
@@ -77,7 +77,7 @@ async function githubRequest(path, token, options = {}) {
 }
 
 async function installationToken(owner, repo, write = false) {
-  const config = githubAppConfig.value();
+  const config = JSON.parse(githubAppConfig.value());
   if (!config?.appId || !config?.privateKey) throw new Error('SADE_GITHUB_APP is not configured.');
   const jwt = appJwt(config);
   const installation = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`, jwt);
@@ -87,7 +87,7 @@ async function installationToken(owner, repo, write = false) {
 }
 
 async function pullRequestInstallationToken(owner, repo) {
-  const config = githubAppConfig.value();
+  const config = JSON.parse(githubAppConfig.value());
   if (!config?.appId || !config?.privateKey) throw new Error('SADE_GITHUB_APP is not configured.');
   const jwt = appJwt(config);
   const installation = await githubRequest(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`, jwt);
