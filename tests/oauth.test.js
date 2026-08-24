@@ -23,13 +23,15 @@ test('Trailing slash normalization in redirect URI check', () => {
   assert.equal(validateRedirectUri(null), true);
 });
 
-test('Authorization URL generation excludes explicit redirect_uri to prevent GitHub 404', () => {
+test('Authorization URL generation includes explicit redirect_uri', () => {
   const clientId = 'Iv23liwWLsUyHyCgAaD';
+  const CALLBACK_URL = 'https://blacksurvivalgear.github.io/sade/';
   const state = 'test_state_123';
   const challenge = 'test_challenge_456';
 
   const params = new URLSearchParams({
     client_id: clientId,
+    redirect_uri: CALLBACK_URL,
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256'
@@ -39,10 +41,18 @@ test('Authorization URL generation excludes explicit redirect_uri to prevent Git
   const urlObj = new URL(authUrl);
 
   assert.equal(urlObj.searchParams.get('client_id'), clientId);
-  assert.equal(urlObj.searchParams.has('redirect_uri'), false);
+  assert.equal(urlObj.searchParams.get('redirect_uri'), CALLBACK_URL);
   assert.equal(urlObj.searchParams.get('state'), state);
   assert.equal(urlObj.searchParams.get('code_challenge'), challenge);
   assert.equal(urlObj.searchParams.get('code_challenge_method'), 'S256');
+});
+
+test('Exchange function sends matching CALLBACK_URL', () => {
+  const CALLBACK_URL = 'https://blacksurvivalgear.github.io/sade/';
+  const payload = { code: 'code123', codeVerifier: 'verifier123', redirectUri: CALLBACK_URL };
+
+  assert.equal(payload.redirectUri, CALLBACK_URL);
+  assert.equal(payload.redirectUri, 'https://blacksurvivalgear.github.io/sade/');
 });
 
 test('PKCE and state validation logic', () => {

@@ -105,6 +105,7 @@ async function beginWebAuth(clientId) {
   saveOAuthState(state, verifier);
   const params = new URLSearchParams({
     client_id: clientId,
+    redirect_uri: CALLBACK_URL,
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256'
