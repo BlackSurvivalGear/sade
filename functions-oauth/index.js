@@ -20,7 +20,8 @@ exports.githubOAuthExchange = onRequest({ region: 'europe-west2', secrets: [gith
   try {
     const { code, codeVerifier, redirectUri } = req.body || {};
     if (!code || !codeVerifier) return send(res, 400, { error: 'Authorization code and PKCE verifier are required.' });
-    if (redirectUri !== CALLBACK_URL) return send(res, 400, { error: 'Invalid redirect URI.' });
+    const targetUri = redirectUri ? (redirectUri.endsWith('/') ? redirectUri : `${redirectUri}/`) : CALLBACK_URL;
+    if (targetUri !== CALLBACK_URL) return send(res, 400, { error: 'Invalid redirect URI.' });
 
     const response = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
