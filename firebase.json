@@ -1,8 +1,16 @@
 {
-  "functions": {
-    "source": "functions",
-    "runtime": "nodejs22"
-  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "core",
+      "runtime": "nodejs22"
+    },
+    {
+      "source": "functions-oauth",
+      "codebase": "oauth",
+      "runtime": "nodejs22"
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules"
   }
