@@ -94,3 +94,17 @@ test('Repository and Engineering Runs navigation is wired into the workspace', (
   assert.match(app, /data-open-run/);
   assert.match(app, /data-manager-repo/);
 });
+
+
+test('Audit Log and Settings workspace views are functional', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  assert.match(html, /id="auditView"/);
+  assert.match(html, /id="auditSearch"/);
+  assert.match(html, /id="settingsView"/);
+  assert.match(html, /id="saveSettings"/);
+  assert.match(app, /function recordAudit\(/);
+  assert.match(app, /function renderAuditLog\(/);
+  assert.match(app, /function persistSettings\(/);
+  assert.match(app, /function clearLocalWorkspace\(/);
+});
