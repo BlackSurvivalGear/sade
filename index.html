@@ -22,6 +22,14 @@
 .chat-thread{position:relative;isolation:isolate}
 .chat-thread::before{content:"";position:absolute;inset:0;background:url("assets/brand/favi.png") center / min(65%,280px) auto no-repeat;opacity:.1;pointer-events:none;z-index:-1}
 .composer textarea{min-width:0}
+.agent-command-card{background:linear-gradient(180deg,rgba(29,21,9,.96),rgba(12,9,5,.98));border-color:#7b5b20;box-shadow:0 18px 50px rgba(0,0,0,.22)}
+.agent-command-card h2{font-size:26px;margin:7px 0 4px}
+.agent-command-box{display:flex;gap:10px;align-items:stretch;margin-top:14px}
+.agent-command-input{flex:1;min-height:116px;background:#080704;color:#fff;border:1px solid #76571d;border-radius:10px;padding:14px;resize:vertical;line-height:1.5}
+.agent-command-input:focus{outline:1px solid var(--green);border-color:var(--green);box-shadow:0 0 0 3px rgba(216,165,54,.08)}
+.agent-command-run{min-width:116px;align-self:stretch}
+.agent-command-note{margin-top:9px;font-size:12px}
+@media(max-width:700px){.agent-command-box{flex-direction:column}.agent-command-run{min-height:46px}}
 </style>
 </head>
 <body>
@@ -36,7 +44,7 @@
 <aside class="side"><div class="eyebrow">Workspace</div><button class="nav active" type="button" data-view="agent">Agent</button><button class="nav" type="button" data-view="runs">Engineering Runs</button><button class="nav" type="button" data-view="repositories">Repositories</button><button class="nav" type="button" data-view="audit">Audit Log</button><button class="nav" type="button" data-view="settings">Settings</button></aside>
 <main class="content">
 <div id="agentView" class="view-panel active"><div class="hero"><img class="home-brand-logo" src="LOGO%20(1).png" alt="SADE AI logo"><div class="eyebrow">Repository-aware engineering</div><h1>SADE AI Agent</h1><p class="muted">Connect GitHub, choose a repository and branch, then open a persistent engineering session for SADE's specialist-agent workflow.</p></div>
-<div class="card"><div class="eyebrow">Repositories</div><h2>Choose an engineering target</h2><p id="repoSubtitle" class="muted">Connect GitHub to load your repositories.</p><div class="repo-toolbar"><input id="repoSearch" class="search" placeholder="Search repositories…"><button id="connectGithubSecondary" class="btn primary">Connect</button></div><div id="repoList" class="repo-list"><div class="empty"><strong>Connect GitHub to begin</strong><p>SADE will discover repositories, branches and files.</p></div></div></div></div>
+<div class="card agent-command-card"><div class="eyebrow">Engineering Command</div><h2>What do you want SADE to do?</h2><p class="muted">Choose the repository below, then give SADE the engineering objective. The instruction will carry into the engineering session.</p><div class="agent-command-box"><textarea id="agentCommandInput" class="agent-command-input" placeholder="Example: Inspect the latest main branch, find why the credit counter is not deducting after generation, fix it without changing the existing Apps Script architecture, test it and prepare a PR."></textarea><button id="agentCommandRun" class="btn primary agent-command-run" type="button">Start Run ▶</button></div><p class="muted agent-command-note">SADE will ask you to select a repository first if no engineering target is active.</p></div><div class="card"><div class="eyebrow">Repositories</div><h2>Choose an engineering target</h2><p id="repoSubtitle" class="muted">Connect GitHub to load your repositories.</p><div class="repo-toolbar"><input id="repoSearch" class="search" placeholder="Search repositories…"><button id="connectGithubSecondary" class="btn primary">Connect</button></div><div id="repoList" class="repo-list"><div class="empty"><strong>Connect GitHub to begin</strong><p>SADE will discover repositories, branches and files.</p></div></div></div></div>
 <div id="runsView" class="view-panel"><div class="eyebrow">Engineering Runs</div><h1>Engineering Runs</h1><p class="muted">Persistent SADE engineering sessions across your connected repositories.</p><div id="runSummary" class="summary-grid"></div><div class="card"><div class="eyebrow">Run History</div><div id="runsList"></div></div></div>
 <div id="repositoriesView" class="view-panel"><div class="eyebrow">Repository Control Centre</div><h1>Repositories</h1><p class="muted">Search connected repositories, inspect their engineering history and start a new run.</p><div class="card"><div class="repo-toolbar"><input id="repositoryManagerSearch" class="search" placeholder="Search connected repositories…"><button id="refreshRepositories" class="btn">Refresh</button></div><div id="repositoryManagerList" class="repo-list"></div></div></div>
 <div id="auditView" class="view-panel"><div class="eyebrow">Accountability & Traceability</div><h1>Audit Log</h1><p class="muted">Local record of significant SADE workspace activity on this browser.</p><div class="audit-toolbar"><input id="auditSearch" class="search" placeholder="Search audit events…"><select id="auditFilter" class="branch-select" style="width:auto;margin:0"><option value="all">All events</option><option value="github">GitHub</option><option value="run">Engineering runs</option><option value="repository">Repositories</option><option value="settings">Settings</option></select><button id="clearAudit" class="btn">Clear Log</button></div><div class="card"><div id="auditList"></div></div></div>
@@ -56,5 +64,28 @@
 <script>
 const splash=document.getElementById('sadeSplash');
 document.getElementById('beginSade').addEventListener('click',()=>{splash.classList.add('hidden');document.querySelector('.shell').focus?.();});
-const form=document.getElementById('chatForm');document.getElementById('chatSubmit').addEventListener('click',()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));</script>
+const form=document.getElementById('chatForm');document.getElementById('chatSubmit').addEventListener('click',()=>form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+const agentCommandInput=document.getElementById('agentCommandInput');
+document.getElementById('agentCommandRun').addEventListener('click',()=>{
+  const objective=agentCommandInput.value.trim();
+  if(!objective){agentCommandInput.focus();return;}
+  const messageInput=document.getElementById('messageInput');
+  if(!document.getElementById('workspace').classList.contains('hidden')){
+    messageInput.value=objective;
+    messageInput.focus();
+    return;
+  }
+  sessionStorage.setItem('sadePendingObjective',objective);
+  document.getElementById('repoSearch').focus();
+  document.getElementById('repoSubtitle').textContent='Select a repository and branch to start this engineering objective.';
+});
+const pendingObjective=sessionStorage.getItem('sadePendingObjective');
+if(pendingObjective) agentCommandInput.value=pendingObjective;
+const workspaceObserver=new MutationObserver(()=>{
+  if(!document.getElementById('workspace').classList.contains('hidden')){
+    const pending=sessionStorage.getItem('sadePendingObjective');
+    if(pending){document.getElementById('messageInput').value=pending;sessionStorage.removeItem('sadePendingObjective');}
+  }
+});
+workspaceObserver.observe(document.getElementById('workspace'),{attributes:true,attributeFilter:['class']});</script>
 </body></html>
