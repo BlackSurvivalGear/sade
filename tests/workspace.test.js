@@ -15,6 +15,7 @@ function workspaceHarness() {
       classList: { add: x => classes.add(x), remove: x => classes.delete(x),
         contains: x => classes.has(x), toggle() {} },
       addEventListener(name, callback) { this.listeners[name] = callback; },
+      setAttribute(name, value) { this[name] = value; },
       querySelectorAll() { return []; },
       appendChild(child) { this.children.push(child); },
       focus() { this.focused = true; }
