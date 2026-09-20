@@ -2,7 +2,7 @@ const { onRequest } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
 
 const githubClientSecret = defineSecret('SADE_GITHUB_CLIENT_SECRET');
-const GITHUB_CLIENT_ID = 'Iv23liwWLsUyHyCgAaD';
+const GITHUB_CLIENT_ID = 'Iv23liwWLsUyhYyCgAaD';
 const CALLBACK_URL = 'https://blacksurvivalgear.github.io/sade/';
 
 function cors(res) {
