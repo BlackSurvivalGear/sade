@@ -21,3 +21,6 @@ jobs:
           node --check js/app.js
           node --check js/github.js
           node --check config/github-app.js
+          node --check functions-oauth/index.js
+      - name: Test GitHub OAuth
+        run: node --test tests/oauth.test.js

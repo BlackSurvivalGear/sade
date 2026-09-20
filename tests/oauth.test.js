@@ -1,12 +1,69 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-test('GitHub App Client ID and Callback URL configuration', () => {
-  const CLIENT_ID = 'Iv23liwWLsUyHyCgAaD';
-  const CALLBACK_URL = 'https://blacksurvivalgear.github.io/sade/';
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 
-  assert.equal(CLIENT_ID, 'Iv23liwWLsUyHyCgAaD');
-  assert.equal(CALLBACK_URL, 'https://blacksurvivalgear.github.io/sade/');
+const EXPECTED_CLIENT_ID = 'Iv23liwWLsUyhYyCgAaD';
+const source = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+
+test('Browser authorization uses the registered GitHub App client ID', async () => {
+  let destination;
+  const values = new Map();
+  const storage = {
+    getItem: key => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: key => values.delete(key)
+  };
+  const context = vm.createContext({
+    window: {
+      location: { search: '', assign: url => { destination = url; } },
+      SADE_FIREBASE_CONFIG: { projectId: 'sade-ai' }
+    },
+    localStorage: storage, sessionStorage: storage,
+    crypto: require('node:crypto').webcrypto,
+    TextEncoder, URLSearchParams, Uint8Array,
+    btoa: value => Buffer.from(value, 'binary').toString('base64'), console
+  });
+  vm.runInContext(source('config/github-app.js'), context);
+  vm.runInContext(source('js/github.js'), context);
+  await context.window.SADE_GitHub.connect();
+  const url = new URL(destination);
+  assert.equal(url.origin + url.pathname, 'https://github.com/login/oauth/authorize');
+  assert.equal(url.searchParams.get('client_id'), EXPECTED_CLIENT_ID);
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://blacksurvivalgear.github.io/sade/');
+  assert.equal(url.searchParams.get('code_challenge_method'), 'S256');
+  assert.ok(url.searchParams.get('code_challenge'));
+  assert.equal(url.searchParams.get('state'), values.get('sade.github.oauth.state'));
+});
+
+test('Firebase exchange sends the same registered client ID to GitHub', async () => {
+  let request;
+  const context = vm.createContext({
+    exports: {}, URLSearchParams, console,
+    require: name => {
+      if (name === 'firebase-functions/v2/https') return { onRequest: (_options, handler) => handler };
+      if (name === 'firebase-functions/params') return { defineSecret: () => ({ value: () => 'test-secret' }) };
+      throw new Error(`Unexpected module: ${name}`);
+    },
+    fetch: async (url, options) => {
+      request = { url, options };
+      return { ok: true, json: async () => ({ access_token: 'test-token' }) };
+    }
+  });
+  vm.runInContext(source('functions-oauth/index.js'), context);
+  let status;
+  const res = { set() {}, status(value) { status = value; return this; }, json() {} };
+  await context.exports.githubOAuthExchange({ method: 'POST', body: {
+    code: 'test-code', codeVerifier: 'test-verifier',
+    redirectUri: 'https://blacksurvivalgear.github.io/sade/'
+  } }, res);
+  assert.equal(status, 200);
+  assert.equal(request.url, 'https://github.com/login/oauth/access_token');
+  assert.equal(request.options.body.get('client_id'), EXPECTED_CLIENT_ID);
+  assert.equal(request.options.body.get('code_verifier'), 'test-verifier');
+  assert.equal(request.options.body.get('redirect_uri'), 'https://blacksurvivalgear.github.io/sade/');
 });
 
 test('Trailing slash normalization in redirect URI check', () => {
@@ -24,7 +81,7 @@ test('Trailing slash normalization in redirect URI check', () => {
 });
 
 test('Authorization URL generation includes explicit redirect_uri', () => {
-  const clientId = 'Iv23liwWLsUyHyCgAaD';
+  const clientId = 'Iv23liwWLsUyhYyCgAaD';
   const CALLBACK_URL = 'https://blacksurvivalgear.github.io/sade/';
   const state = 'test_state_123';
   const challenge = 'test_challenge_456';
