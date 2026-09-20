@@ -15,6 +15,7 @@ function workspaceHarness() {
       classList: { add: x => classes.add(x), remove: x => classes.delete(x),
         contains: x => classes.has(x), toggle() {} },
       addEventListener(name, callback) { this.listeners[name] = callback; },
+      setAttribute(name, value) { this[name] = value; },
       querySelectorAll() { return []; },
       appendChild(child) { this.children.push(child); },
       focus() { this.focused = true; }
@@ -30,6 +31,7 @@ function workspaceHarness() {
   const alerts = [];
   const context = vm.createContext({
     document: { querySelector: selector => elements.get(selector) || null,
+      querySelectorAll: selector => selector === '[data-view]' || selector === '.view-panel' ? [] : [],
       createElement: () => element(), title: '' },
     window: { addEventListener() {} },
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) },
@@ -77,4 +79,18 @@ test('Restoring a saved session opens the instruction box without a removed stat
   assert.equal(elements.get('#messageInput').focused, true);
   assert.equal(elements.get('#chatSubtitle').textContent, 'tester/project · feature');
   assert.equal(elements.get('#chatMessages').children.at(-1).textContent, 'Existing task');
+});
+
+
+test('Repository and Engineering Runs navigation is wired into the workspace', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '../js/app.js'), 'utf8');
+  assert.match(html, /data-view="runs"/);
+  assert.match(html, /data-view="repositories"/);
+  assert.match(html, /id="runsView"/);
+  assert.match(html, /id="repositoriesView"/);
+  assert.match(app, /function renderRunManager\(\)/);
+  assert.match(app, /function renderRepositoryManager\(/);
+  assert.match(app, /data-open-run/);
+  assert.match(app, /data-manager-repo/);
 });
